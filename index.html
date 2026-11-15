@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>月度经营看板 · 新月度看板</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script>window.echarts||document.write('<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"><\/script>')</script>
+<style>
+  :root{
+    --bg:#f3f5fa; --card:#ffffff; --ink:#171c26; --sub:#667085;
+    --line:#e7eaf1; --line-soft:#eef0f6;
+    --primary:#4f6ef2; --primary-2:#7c5cff;
+    --up:#e5484d; --down:#2ea36c;
+    --shadow-sm:0 1px 2px rgba(23,28,38,.04),0 2px 10px rgba(23,28,38,.05);
+    --shadow-md:0 2px 6px rgba(23,28,38,.05),0 14px 34px rgba(23,28,38,.10);
+    --r:16px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(1100px 420px at 88% -8%, rgba(124,92,255,.09), transparent 62%),
+      radial-gradient(900px 380px at -8% -6%, rgba(79,110,242,.10), transparent 58%),
+      var(--bg);
+    background-attachment:fixed;
+  }
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#cdd3e0;border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#b6bdd0;background-clip:padding-box}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{position:sticky;top:0;z-index:20;
+    background:rgba(255,255,255,.72);backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);
+    border-bottom:1px solid rgba(231,234,241,.9);box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 6px 24px rgba(23,28,38,.05)}
+  .topbar-inner{max-width:1320px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .topbar h1{font-size:19px;font-weight:800;letter-spacing:.2px;
+    background:linear-gradient(100deg,#2b3a8f,#4f6ef2 45%,#7c5cff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .topbar .meta{color:var(--sub);font-size:12px;display:flex;align-items:center;
+    background:rgba(246,247,251,.9);border:1px solid var(--line);border-radius:999px;padding:5px 14px}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--down);margin-right:6px;
+    box-shadow:0 0 0 0 rgba(46,163,108,.5);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,163,108,.45)}70%{box-shadow:0 0 0 7px rgba(46,163,108,0)}100%{box-shadow:0 0 0 0 rgba(46,163,108,0)}}
+  .tabs{display:flex;gap:6px;margin-left:auto;background:rgba(246,247,251,.9);border:1px solid var(--line);border-radius:12px;padding:4px}
+  .tab{padding:7px 18px;border-radius:9px;cursor:pointer;color:var(--sub);font-weight:600;border:none;background:none;font-size:13.5px;transition:all .22s ease}
+  .tab:hover{color:var(--primary);background:rgba(79,110,242,.07)}
+  .tab.active{background:linear-gradient(120deg,#4f6ef2,#6d5cf0);color:#fff;box-shadow:0 4px 12px rgba(79,110,242,.35)}
+  .wrap{max-width:1320px;margin:0 auto;padding:18px 28px 64px}
+  .page{display:none}
+  .page.active{display:block;animation:fadeUp .35s ease both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ---------- 切片器 ---------- */
+  .slicer{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px;margin-bottom:18px;box-shadow:var(--shadow-sm)}
+  .slicer-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0;flex-wrap:wrap}
+  .slicer-row+.slicer-row{border-top:1px dashed var(--line-soft)}
+  .slicer-label{flex:0 0 62px;color:var(--sub);font-size:13px;font-weight:600;line-height:28px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;flex:1}
+  .chip{padding:5px 15px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--sub);
+        font-size:12.5px;cursor:pointer;user-select:none;transition:all .18s ease;font-weight:500}
+  .chip:hover{border-color:#b9c5ff;color:var(--primary);background:#f6f8ff;transform:translateY(-1px)}
+  .chip.active{background:linear-gradient(120deg,#4f6ef2,#6d5cf0);border-color:transparent;color:#fff;font-weight:600;
+        box-shadow:0 3px 10px rgba(79,110,242,.30)}
+  .chip.active.group-chip{background:#eef1ff;border-color:#c3ccff;color:var(--primary);box-shadow:none}
+  .chip-mini{flex:0 0 auto;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--sub);
+        font-size:12px;cursor:pointer;user-select:none;transition:all .18s ease;line-height:1;font-weight:500}
+  .chip-mini:hover{border-color:#b9c5ff;color:var(--primary);background:#f6f8ff}
+  .chip-mini.on{background:#eef1ff;border-color:#b9c5ff;color:var(--primary);font-weight:700}
+  .slicer-foot{display:flex;align-items:center;gap:10px;margin-top:9px}
+  .slicer-tip{color:var(--sub);font-size:12px}
+  .btn-reset{margin-left:auto;padding:5px 16px;border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--sub);
+        font-size:12.5px;cursor:pointer;font-weight:500;transition:all .18s ease}
+  .btn-reset:hover{border-color:#b9c5ff;color:var(--primary);background:#f6f8ff;box-shadow:0 2px 8px rgba(79,110,242,.12)}
+
+  .sec-title{font-size:15.5px;font-weight:800;margin:26px 0 13px;display:flex;align-items:center;gap:9px;letter-spacing:.2px}
+  .sec-title::before{content:"";width:4px;height:17px;border-radius:2px;background:linear-gradient(180deg,#4f6ef2,#7c5cff)}
+
+  /* ---------- KPI ---------- */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .kpi-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
+  .kpi.hero{position:relative;overflow:hidden;padding:20px 24px;border:1px solid #e0e5ff;
+    background:linear-gradient(130deg,#eef1ff 0%,#fbfcff 52%,#fff 100%)}
+  .kpi.hero::after{content:"";position:absolute;right:-46px;top:-46px;width:150px;height:150px;border-radius:50%;
+    background:radial-gradient(circle,rgba(124,92,255,.14),transparent 68%);pointer-events:none}
+  .kpi.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+    background:linear-gradient(180deg,#4f6ef2,#7c5cff);border-radius:4px 0 0 4px}
+  .kpi.hero .label{font-size:13px}
+  .kpi.hero .value{font-size:38px;font-weight:800;letter-spacing:-.6px;margin-top:8px;
+    background:linear-gradient(105deg,#26338f,#4f6ef2 55%,#7c5cff);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero-bar{height:6px;border-radius:999px;background:#e6eaf9;margin-top:14px;overflow:hidden;position:relative}
+  .hero-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#4f6ef2,#8f7bff);
+    box-shadow:0 0 12px rgba(79,110,242,.45);transition:width .8s cubic-bezier(.22,.8,.36,1)}
+  .hero-bar i.warn{background:linear-gradient(90deg,#f59e0b,#ffc069);box-shadow:0 0 12px rgba(245,158,11,.4)}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:15px 18px;
+    box-shadow:var(--shadow-sm);transition:transform .2s ease,box-shadow .2s ease}
+  .kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+  .kpi .label{color:var(--sub);font-size:12px;display:flex;justify-content:space-between;align-items:center}
+  .kpi .label .who{font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600}
+  .who-aliu{background:#eef1ff;color:var(--primary)}
+  .who-dianbo{background:#fff4e0;color:#c47d09}
+  .who-all{background:#e9f7ef;color:var(--down)}
+  .kpi .value{font-size:23px;font-weight:800;margin-top:7px;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+  .kpi .g-sub{color:var(--sub);font-size:12px;margin-top:5px}
+  .up{color:var(--up)} .down{color:var(--down)}
+
+  /* ---------- 卡片 / 图表 ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow-sm);transition:box-shadow .25s ease}
+  .card:hover{box-shadow:var(--shadow-md)}
+  .chart{width:100%;height:340px}
+  .goal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}
+  .goal{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:17px 20px;box-shadow:var(--shadow-sm);transition:transform .2s ease,box-shadow .2s ease}
+  .goal:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+  .goal .g-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+  .goal .g-name{font-weight:700;font-size:14px}
+  .goal .g-val{font-weight:800;font-size:19px;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
+  .bar-track{height:9px;background:#edf0f7;border-radius:999px;overflow:hidden;position:relative;box-shadow:inset 0 1px 2px rgba(23,28,38,.06)}
+  .bar-fill{height:100%;border-radius:999px;transition:width .7s cubic-bezier(.22,.8,.36,1)}
+  .goal .g-sub{color:var(--sub);font-size:12px;margin-top:8px}
+  .subtabs{display:flex;gap:8px;margin-bottom:12px}
+  .subtab{padding:6px 16px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:500;border:1px solid var(--line);background:#fff;color:var(--sub);transition:all .18s ease}
+  .subtab:hover{border-color:#b9c5ff;color:var(--primary)}
+  .subtab.active{border-color:transparent;color:#fff;font-weight:600;background:linear-gradient(120deg,#4f6ef2,#6d5cf0);box-shadow:0 3px 10px rgba(79,110,242,.28)}
+  .subtab.hidden{display:none}
+
+  /* ---------- 表格 ---------- */
+  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card)}
+  th,td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line-soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left}
+  thead th{background:#f8f9fd;color:#5a6377;font-weight:700;font-size:12px;letter-spacing:.4px;position:sticky;top:0;z-index:2;
+    border-bottom:1px solid var(--line)}
+  tbody tr{transition:background .15s ease}
+  tbody tr:hover{background:#f5f7ff}
+  tbody tr:last-child td{border-bottom:none}
+  .r1 td:first-child,.r2 td:first-child,.r3 td:first-child{font-weight:800}
+  .r1 td:first-child{color:#d4a017}.r2 td:first-child{color:#8c9bab}.r3 td:first-child{color:#b26a2f}
+  .r1 td:first-child::after{content:" 🥇";font-size:12px}
+  .r2 td:first-child::after{content:" 🥈";font-size:12px}
+  .r3 td:first-child::after{content:" 🥉";font-size:12px}
+  .tbl-scroll{max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--card);box-shadow:var(--shadow-sm)}
+  .tbl-scroll tr.total-row{background:#f6f8fd;font-weight:800}
+  .tbl-scroll tr.total-row td{border-top:2px solid var(--line);color:var(--ink);position:sticky;bottom:0}
+  .tbl-scroll thead th{position:sticky;top:0;z-index:2}
+  .search{padding:8px 14px;border:1px solid var(--line);border-radius:10px;width:250px;outline:none;margin-left:auto;
+    background:#fff;color:var(--ink);font-size:13px;transition:all .18s ease}
+  .search::placeholder{color:#9aa3b5}
+  .search:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(79,110,242,.12)}
+  .toolbar{display:flex;align-items:center;margin-bottom:11px;gap:10px}
+  .foot{color:#8a93a6;font-size:12px;text-align:center;margin-top:44px;line-height:1.9}
+  .foot a{color:var(--primary);text-decoration:none}
+  .foot a:hover{text-decoration:underline}
+  .empty-tip{padding:34px;text-align:center;color:var(--sub)}
+  @media (max-width:760px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.tabs{width:100%;margin-left:0}.wrap{padding:14px 16px 50px}.topbar-inner{padding:12px 16px}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <h1>📊 月度经营看板</h1>
+    <span class="meta"><span class="dot"></span>数据更新于 <b id="updated">—</b> · 每小时自动同步飞书表格</span>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-page="overview">总览</button>
+      <button class="tab" data-page="groups">小组对比</button>
+      <button class="tab" data-page="rank">员工排名</button>
+      <button class="tab" data-page="process">过程数据</button>
+    </div>
+  </div>
+</div>
+<div class="wrap">
+
+  <!-- ============ 切片器 ============ -->
+  <div class="slicer" id="slicer">
+    <div class="slicer-row">
+      <span class="slicer-label">归属</span>
+      <div class="chips" id="whoChips">
+        <span class="chip active" data-who="all">全部</span>
+        <span class="chip" data-who="aliu">阿留</span>
+        <span class="chip" data-who="dianbo">店播</span>
+      </div>
+    </div>
+    <div class="slicer-row">
+      <span class="slicer-label">期次</span>
+      <div class="chips" id="qiChips"></div>
+      <span class="chip-mini" data-bulk="qi-mode">多选</span>
+      <span class="chip-mini" data-bulk="qi-all">全选</span>
+      <span class="chip-mini" data-bulk="qi-none">全不选</span>
+    </div>
+    <div class="slicer-row">
+      <span class="slicer-label">小组</span>
+      <div class="chips" id="groupChips"></div>
+      <span class="chip-mini" data-bulk="group-mode">多选</span>
+      <span class="chip-mini" data-bulk="group-all">全选</span>
+      <span class="chip-mini" data-bulk="group-none">全不选</span>
+    </div>
+    <div class="slicer-foot">
+      <span class="slicer-tip" id="slicerTip"></span>
+      <button class="btn-reset" id="resetBtn">重置筛选</button>
+    </div>
+  </div>
+
+  <!-- ============ 总览 ============ -->
+  <div class="page active" id="page-overview">
+    <div class="kpi-hero" id="kpiHero"></div>
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="sec-title">本月目标进度（整体月度目标，不受期次/小组筛选影响）</div>
+    <div class="goal-grid" id="goalGrid"></div>
+    <div class="sec-title">分期次业绩趋势（按当前筛选汇总）</div>
+    <div class="card"><div class="chart" id="chartTrend"></div></div>
+    <div class="sec-title">各期次明细（按当前筛选汇总）</div>
+    <div class="tbl-scroll"><table id="qiTable"></table></div>
+  </div>
+
+  <!-- ============ 小组对比 ============ -->
+  <div class="page" id="page-groups">
+    <div class="toolbar">
+      <span class="slicer-tip" id="groupCount"></span>
+      <input class="search" id="groupSearch" placeholder="搜索期次 / 小组…">
+    </div>
+    <div id="groupSections"></div>
+  </div>
+
+  <!-- ============ 员工排名 ============ -->
+  <div class="page" id="page-rank">
+    <div class="toolbar">
+      <span style="color:var(--sub);font-size:12px" id="rankCount"></span>
+      <input class="search" id="rankSearch" placeholder="搜索姓名 / 小组…">
+    </div>
+    <div id="rankSections"></div>
+  </div>
+
+  <!-- ============ 过程数据 ============ -->
+  <div class="page" id="page-process">
+    <div class="sec-title">过程指标均值对比</div>
+    <div class="card"><div class="chart" id="chartProc"></div></div>
+    <div class="sec-title">员工过程明细</div>
+    <div class="subtabs" id="procSubtabs">
+      <button class="subtab active" data-proc="aliu">阿留员工</button>
+      <button class="subtab" data-proc="dianbo">店播员工</button>
+    </div>
+    <div class="toolbar"><input class="search" id="procSearch" placeholder="搜索姓名 / 小组…"></div>
+    <div class="tbl-scroll"><table id="procTable"></table></div>
+  </div>
+
+  <div class="foot">
+    数据来源：<a id="srcLink" target="_blank" style="color:var(--primary)">飞书表格 · 月度员工看板</a>（实时引用表）<br>
+    本看板由自动化任务每小时从飞书拉取最新数据并刷新 · 更新于 <span id="updated2">—</span>
+  </div>
+</div>
+
+<script src="data.js?v=2"></script>
+<script>
+/* ================= 基础 ================= */
+let D = window.DASH;
+const charts = {};
+function num(s){ if(s==null) return 0; s=String(s).trim().replace(/[¥,\s]/g,''); if(s===''||s==='-') return 0;
+  if(s.endsWith('%')){ const v=parseFloat(s.slice(0,-1)); return isNaN(v)?0:v; }
+  const v=parseFloat(s); return isNaN(v)?0:v; }
+function fmtW(v){ if(!isFinite(v))return '—'; if(Math.abs(v)>=1e8) return (v/1e8).toFixed(2)+'亿'; if(Math.abs(v)>=1e4) return (v/1e4).toFixed(1)+'万'; return v.toLocaleString('zh-CN'); }
+function fmtMoney(v){ return '¥'+fmtW(v); }
+function pctTxt(s){ const v=num(s); return (s&&String(s).includes('%'))?String(s).trim():v.toFixed(2)+'%'; }
+
+/* 业务线转化率月度目标：优先取飞书表合计区「转化率本月目标」，缺失时回退默认值 */
+const CVR_TARGET_DEF={aliu:24,dianbo:14};
+function cvrTargetOf(w){
+  const t=(D&&D[w]&&D[w].total)||{};
+  const v=num(t['转化率本月目标']);
+  return v>0?v:CVR_TARGET_DEF[w];
+}
+
+/* ---------- 图表通用风格 ---------- */
+const TT={backgroundColor:'#ffffff',borderColor:'#e7eaf1',textStyle:{color:'#171c26'},
+  extraCssText:'box-shadow:0 10px 30px rgba(23,28,38,.14);border-radius:10px;padding:10px 14px;'};
+const AX={axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false},axisLabel:{color:'#667085'}};
+const GRID_S={lineStyle:{color:'#eef1f7'}};
+const GRAD_BLUE=new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#6d8bff'},{offset:1,color:'#4f6ef2'}]);
+const GRAD_ORANGE=new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#ffc069'},{offset:1,color:'#f59e0b'}]);
+const GRAD_HBLUE=new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#4f6ef2'},{offset:1,color:'#7c9bff'}]);
+
+document.getElementById('updated').textContent = D.updated_at;
+document.getElementById('updated2').textContent = D.updated_at;
+document.getElementById('srcLink').href = D.source.url;
+
+/* ================= 切片器状态 ================= */
+let allRows=[], allQis=[], allGroups=[], oldQis=[], oldGroups=[];
+const state = { who:'all', qis:new Set(), groups:new Set(), qiMode:'multi', groupMode:'multi' };
+
+function buildSlicer(){
+  document.getElementById('qiChips').innerHTML =
+    allQis.map(v=>`<span class="chip qi-chip ${state.qis.has(v)?'active':''}" data-v="${v}">${v}</span>`).join('');
+  document.getElementById('groupChips').innerHTML =
+    allGroups.map(v=>`<span class="chip group-chip ${state.groups.has(v)?'active':''}" data-v="${v}">${v}</span>`).join('');
+}
+function refreshOptions(keep){
+  const prevQ=new Set(state.qis), prevG=new Set(state.groups);
+  allRows = [...D.aliu.groups, ...D.dianbo.groups];
+  allQis = [...new Set(allRows.map(r=>r['期次']).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  allGroups = [...new Set(allRows.map(r=>r['小组']).filter(Boolean))].sort();
+  if(keep){
+    // 保留原有选择；新出现的期次/小组自动选中；消失的自动移除
+    state.qis = new Set(allQis.filter(q=>prevQ.has(q) || !oldQis.includes(q)));
+    state.groups = new Set(allGroups.filter(g=>prevG.has(g) || !oldGroups.includes(g)));
+    if(!state.qis.size) state.qis=new Set(allQis);
+    if(!state.groups.size) state.groups=new Set(allGroups);
+  }else{
+    state.qis=new Set(allQis); state.groups=new Set(allGroups);
+  }
+  oldQis=[...allQis]; oldGroups=[...allGroups];
+  buildSlicer();
+}
+
+function refreshTip(){
+  const n = activeRows().length;
+  document.getElementById('slicerTip').textContent =
+    `当前筛选：${state.who==='all'?'全部':(state.who==='aliu'?'阿留':'店播')} · 期次 ${state.qis.size}/${allQis.length} · 小组 ${state.groups.size}/${allGroups.length} · 明细行 ${n}`;
+}
+document.getElementById('whoChips').addEventListener('click',e=>{
+  const c=e.target.closest('.chip'); if(!c)return;
+  state.who=c.dataset.who;
+  document.querySelectorAll('#whoChips .chip').forEach(x=>x.classList.toggle('active',x===c));
+  // 归属选定后，过程页签自动切换到对应业务线（排名页随归属自动只显示对应区块）
+  if(state.who!=='all'){ setProcTab(state.who); }
+  renderAll();
+});
+document.getElementById('qiChips').addEventListener('click',e=>{
+  const c=e.target.closest('.chip'); if(!c)return;
+  const v=c.dataset.v;
+  if(state.qiMode==='single'){ state.qis=new Set([v]); buildSlicer(); }
+  else {
+    if(state.qis.has(v)){ if(state.qis.size>1){state.qis.delete(v);c.classList.remove('active');} }
+    else { state.qis.add(v); c.classList.add('active'); }
+  }
+  renderAll();
+});
+document.getElementById('groupChips').addEventListener('click',e=>{
+  const c=e.target.closest('.chip'); if(!c)return;
+  const v=c.dataset.v;
+  if(state.groupMode==='single'){ state.groups=new Set([v]); buildSlicer(); }
+  else {
+    if(state.groups.has(v)){ if(state.groups.size>1){state.groups.delete(v);c.classList.remove('active');} }
+    else { state.groups.add(v); c.classList.add('active'); }
+  }
+  renderAll();
+});
+document.getElementById('slicer').addEventListener('click',e=>{
+  const b=e.target.closest('.chip-mini'); if(!b)return;
+  const act=b.dataset.bulk;
+  if(act==='qi-all'){ state.qis=new Set(allQis); }
+  else if(act==='qi-none'){ state.qis=new Set(); }
+  else if(act==='qi-mode'){ state.qiMode=state.qiMode==='multi'?'single':'multi'; }
+  else if(act==='group-all'){ state.groups=new Set(allGroups); }
+  else if(act==='group-none'){ state.groups=new Set(); }
+  else if(act==='group-mode'){ state.groupMode=state.groupMode==='multi'?'single':'multi'; }
+  // 模式按钮文字与高亮
+  document.querySelector('[data-bulk="qi-mode"]').textContent = state.qiMode==='multi'?'多选':'单选';
+  document.querySelector('[data-bulk="qi-mode"]').classList.toggle('on',state.qiMode==='single');
+  document.querySelector('[data-bulk="group-mode"]').textContent = state.groupMode==='multi'?'多选':'单选';
+  document.querySelector('[data-bulk="group-mode"]').classList.toggle('on',state.groupMode==='single');
+  buildSlicer(); renderAll();
+});
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  state.who='all';
+  document.querySelectorAll('#whoChips .chip').forEach(x=>x.classList.toggle('active',x.dataset.who==='all'));
+  state.qiMode='multi'; state.groupMode='multi';
+  document.querySelector('[data-bulk="qi-mode"]').textContent='多选';
+  document.querySelector('[data-bulk="qi-mode"]').classList.remove('on');
+  document.querySelector('[data-bulk="group-mode"]').textContent='多选';
+  document.querySelector('[data-bulk="group-mode"]').classList.remove('on');
+  refreshOptions(false);
+  renderAll();
+});
+
+/* ================= 数据聚合 ================= */
+function activeWhos(){ return state.who==='all'?['aliu','dianbo']:[state.who]; }
+function activeRows(){
+  const out=[];
+  activeWhos().forEach(w=>{
+    D[w].groups.forEach(r=>{
+      if(state.qis.has(r['期次']) && state.groups.has(r['小组'])) out.push({...r,_who:w});
+    });
+  });
+  return out;
+}
+function aggRows(rows){
+  const s={成交GMV含退款:0,实际GMV:0,目标GMV:0,线索量:0,订单量:0,退款订单量:0,退款金额:0};
+  rows.forEach(r=>{
+    s.成交GMV含退款+=num(r['成交GMV含退款']); s.实际GMV+=num(r['实际GMV']); s.目标GMV+=num(r['目标GMV']);
+    s.线索量+=num(r['线索量']); s.订单量+=num(r['订单量']); s.退款订单量+=num(r['退款订单量']); s.退款金额+=num(r['退款金额']);
+  });
+  // 与飞书表口径一致：(订单量-退款订单量)/线索量
+  s.转化率=s.线索量?(s.订单量-s.退款订单量)/s.线索量*100:0;
+  s.退款率=s.订单量?s.退款订单量/s.订单量*100:0;
+  s.完成率=s.目标GMV?s.实际GMV/s.目标GMV*100:null;
+  return s;
+}
+
+/* ================= 页签 ================= */
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.toggle('active',t.dataset.page===id));
+  Object.values(charts).forEach(c=>c&&c.resize());
+}
+document.getElementById('tabs').addEventListener('click',e=>{
+  if(e.target.dataset.page) showPage(e.target.dataset.page);
+});
+
+/* ================= KPI ================= */
+function kpiCard(label,whoHtml,value,sub){
+  return `<div class="kpi"><div class="label"><span>${label}</span>${whoHtml}</div>
+  <div class="value">${value}</div><div class="g-sub">${sub||''}</div></div>`;
+}
+function renderKpi(){
+  const rows=activeRows();
+  const h=document.getElementById('kpiHero');
+  const g=document.getElementById('kpiGrid');
+  if(!rows.length){ h.innerHTML='<div class="empty-tip">当前筛选条件下没有数据</div>'; g.innerHTML=''; return; }
+  const s=aggRows(rows);
+  const whoTag = state.who==='all' ? '<span class="who who-all">合计</span>'
+    : `<span class="who who-${state.who}">${state.who==='aliu'?'阿留':'店播'}</span>`;
+  // 主指标：转化率 + 实际GMV（大字）
+  const effOrders=s.订单量-s.退款订单量;
+  // 转化率进度条按飞书表的真实月度目标做满格：阿留24%、店播14%；全部视图按线索量加权
+  const CVR_TARGET={aliu:cvrTargetOf('aliu'),dianbo:cvrTargetOf('dianbo')};
+  let cvrWLeads=0,cvrWTarget=0;
+  ['aliu','dianbo'].forEach(w=>{
+    if(state.who!=='all'&&state.who!==w)return;
+    const L=rows.filter(r=>r._who===w).reduce((x,r)=>x+num(r['线索量']),0);
+    cvrWLeads+=L; cvrWTarget+=L*CVR_TARGET[w];
+  });
+  const cvrTarget=state.who!=='all'?CVR_TARGET[state.who]:(cvrWLeads>0?cvrWTarget/cvrWLeads:25);
+  const cvrPct=cvrTarget>0?Math.min(s.转化率/cvrTarget*100,100):0;
+  const gmvPct=s.目标GMV>0?Math.min(s.实际GMV/s.目标GMV*100,100):0;
+  const gmvTxt=s.目标GMV>0?`目标 ¥${fmtW(s.目标GMV)} · 完成 ${(s.实际GMV/s.目标GMV*100).toFixed(1)}%`:'';
+  h.innerHTML=`
+    <div class="kpi hero"><div class="label"><span>实际转化率</span>${whoTag}</div>
+      <div class="value">${s.转化率.toFixed(2)}%</div>
+      <div class="g-sub">有效订单 ${effOrders.toLocaleString()} ÷ 线索 ${s.线索量.toLocaleString()} · 目标 ${cvrTarget.toFixed(0)}%（达成 ${(s.转化率/cvrTarget*100).toFixed(1)}%）</div>
+      <div class="hero-bar"><i class="${cvrPct<40?'warn':''}" style="width:${cvrPct.toFixed(1)}%"></i></div>
+    </div>
+    <div class="kpi hero"><div class="label"><span>实际 GMV</span>${whoTag}</div>
+      <div class="value">${fmtMoney(s.实际GMV)}</div>
+      <div class="g-sub">${gmvTxt}</div>
+      <div class="hero-bar"><i class="${gmvPct<40?'warn':''}" style="width:${gmvPct.toFixed(1)}%"></i></div>
+    </div>`;
+  // 第二排：其余指标（小字）
+  g.innerHTML=[
+    kpiCard('成交 GMV',whoTag,fmtMoney(s.成交GMV含退款),'含退款口径'),
+    kpiCard('GMV 完成率',whoTag,s.完成率==null?'—':s.完成率.toFixed(2)+'%',''),
+    kpiCard('线索量',whoTag,s.线索量.toLocaleString('zh-CN'),''),
+    kpiCard('订单量',whoTag,s.订单量.toLocaleString('zh-CN'),''),
+    kpiCard('退款率',whoTag,s.退款率.toFixed(2)+'%','退款 '+fmtMoney(s.退款金额)),
+  ].join('');
+}
+
+/* ================= 目标进度 ================= */
+function renderGoals(){
+  const g=document.getElementById('goalGrid');
+  const whos=activeWhos();
+  const grads=['linear-gradient(90deg,#4f6ef2,#7c9bff)','linear-gradient(90deg,#2ea36c,#67d59a)','linear-gradient(90deg,#f59e0b,#ffc069)'];
+  let html='';
+  whos.forEach(w=>{
+    const t=D[w].total||{};
+    const whoName=w==='aliu'?'阿留':'店播';
+    const defs=[
+      ['线索目标进度',num(t['线索已分配']),num(t['线索本月目标']),num(t['线索已分配'])/Math.max(num(t['线索本月目标']),1)*100,'已分配 '+num(t['线索已分配']).toLocaleString()+' / 目标 '+num(t['线索本月目标']).toLocaleString()+' 条'],
+      ['GMV 目标进度',num(t['GMV已完成']),num(t['GMV本月目标']),num(t['GMV已完成'])/Math.max(num(t['GMV本月目标']),1)*100,'¥'+fmtW(num(t['GMV已完成']))+' / ¥'+fmtW(num(t['GMV本月目标']))],
+      ['转化率目标达成',num(t['转化率已完成']),num(t['转化率本月目标']),num(t['转化率本月目标'])?num(t['转化率已完成'])/num(t['转化率本月目标'])*100:null,'实际 '+pctTxt(t['转化率已完成'])+' / 目标 '+pctTxt(t['转化率本月目标'])],
+    ];
+    defs.forEach(([name,got,goal,percent,sub],i)=>{
+      const p=Math.min(percent!=null?percent:0,100);
+      const over=percent!=null&&percent>100;
+      html+=`<div class="goal"><div class="g-head"><span class="g-name"><span class="who who-${w}" style="margin-right:6px">${whoName}</span>${name}</span>
+        <span class="g-val ${over?'down':'up'}">${percent==null?'—':percent.toFixed(1)+'%'}</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${p}%;background:${over?'linear-gradient(90deg,#e5484d,#ff8a8f)':grads[i]}"></div></div>
+        <div class="g-sub">${sub}</div></div>`;
+    });
+  });
+  g.innerHTML=html;
+}
+
+/* ================= 期次趋势 ================= */
+function trendCharts(){
+  const rows=activeRows();
+  const map={};
+  rows.forEach(r=>{
+    const q=r['期次'], w=r._who;
+    const key=q+'|'+w;
+    if(!map[key]) map[key]={qi:q,who:w,gmv:0,realGmv:0,leads:0,orders:0,refunds:0};
+    const m=map[key];
+    m.gmv+=num(r['成交GMV含退款']); m.realGmv+=num(r['实际GMV']);
+    m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
+  });
+  const qis=[...state.qis].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  const get=(q,w)=>map[q+'|'+w]||{realGmv:0,leads:0,orders:0,refunds:0};
+  const qiCvr=m=>m.leads>0?+(((m.orders-m.refunds)/m.leads)*100).toFixed(2):null;
+  const showAliu=state.who!=='dianbo', showDianbo=state.who!=='aliu';
+  const series=[];
+  if(showAliu) series.push({name:'阿留 实际GMV',type:'bar',data:qis.map(q=>get(q,'aliu').realGmv),itemStyle:{borderRadius:[6,6,0,0],color:GRAD_BLUE},barMaxWidth:34});
+  if(showDianbo) series.push({name:'店播 实际GMV',type:'bar',data:qis.map(q=>get(q,'dianbo').realGmv),itemStyle:{borderRadius:[6,6,0,0],color:GRAD_ORANGE},barMaxWidth:34});
+  if(showAliu) series.push({name:'阿留 转化率',type:'line',yAxisIndex:1,smooth:true,data:qis.map(q=>qiCvr(get(q,'aliu'))),itemStyle:{color:'#7c5cff'},lineStyle:{width:2.5},symbolSize:6});
+  if(showDianbo) series.push({name:'店播 转化率',type:'line',yAxisIndex:1,smooth:true,data:qis.map(q=>qiCvr(get(q,'dianbo'))),itemStyle:{color:'#e5484d'},lineStyle:{width:2.5},symbolSize:6});
+  const c1=echarts.init(document.getElementById('chartTrend'));
+  c1.setOption({
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow',shadowStyle:{color:'rgba(79,110,242,.06)'}},valueFormatter:v=>v==null?'—':('¥'+fmtW(v)),...TT},
+    legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+    grid:{left:60,right:60,top:40,bottom:30},
+    xAxis:{type:'category',data:qis,...AX},
+    yAxis:[{type:'value',name:'GMV',axisLabel:{color:'#667085',formatter:v=>(v/1e4).toFixed(0)+'万'},nameTextStyle:{color:'#667085'},splitLine:GRID_S},
+           {type:'value',name:'转化率(%)',position:'right',axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:{show:false},axisLine:{show:false}}],
+    series},{notMerge:true});
+  charts.t1=c1;
+}
+
+/* ================= 各期次明细 ================= */
+function renderQiTable(){
+  const rows=activeRows();
+  const map={};
+  rows.forEach(r=>{
+    const k=r['期次']+'|'+r._who;
+    if(!map[k]) map[k]={qi:r['期次'],who:r._who,gmv:0,realGmv:0,goal:0,leads:0,orders:0,refunds:0};
+    const m=map[k];
+    m.gmv+=num(r['成交GMV含退款']); m.realGmv+=num(r['实际GMV']);
+    m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
+    const g=num(r['目标GMV']); if(g>0)m.goal+=g;
+  });
+  const arr=Object.values(map).sort((a,b)=>a.qi.localeCompare(b.qi,undefined,{numeric:true})||a.who.localeCompare(b.who));
+  const el=document.getElementById('qiTable');
+  if(!arr.length){ el.innerHTML='<tbody><tr><td class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>'; return; }
+  const t={leads:0,orders:0,gmv:0,realGmv:0,goal:0,refunds:0};
+  arr.forEach(m=>{ t.leads+=m.leads;t.orders+=m.orders;t.gmv+=m.gmv;t.realGmv+=m.realGmv;t.goal+=m.goal;t.refunds+=m.refunds; });
+  // 与飞书表口径一致：(订单量-退款订单量)/线索量
+  const cvr=m=>m.leads>0?((m.orders-m.refunds)/m.leads*100).toFixed(2)+'%':'—';
+  const rr=m=>m.orders>0?(m.refunds/m.orders*100).toFixed(2)+'%':'—';
+  const rateCell=m=>m.goal>0?`<td class="${m.realGmv/m.goal*100>=100?'down':'up'}">${(m.realGmv/m.goal*100).toFixed(1)}%</td>`:'<td>—</td>';
+  const whoTag=w=>`<span class="who who-${w}">${w==='aliu'?'阿留':'店播'}</span>`;
+  el.innerHTML=
+    `<thead><tr><th>期次</th><th>归属</th><th>线索量</th><th>订单量</th><th>实际GMV</th><th>转化率</th><th>成交GMV</th><th>退款率</th><th>目标GMV</th><th>完成率</th></tr></thead><tbody>`+
+    arr.map(m=>`<tr><td><b>${m.qi}</b></td><td>${whoTag(m.who)}</td><td>${m.leads.toLocaleString()}</td><td>${m.orders.toLocaleString()}</td><td>¥${fmtW(m.realGmv)}</td><td>${cvr(m)}</td><td>¥${fmtW(m.gmv)}</td><td>${rr(m)}</td><td>${m.goal>0?'¥'+fmtW(m.goal):'—'}</td>${rateCell(m)}</tr>`).join('')+
+    `<tr class="total-row"><td><b>合计</b></td><td></td><td>${t.leads.toLocaleString()}</td><td>${t.orders.toLocaleString()}</td><td>¥${fmtW(t.realGmv)}</td><td>${cvr(t)}</td><td>¥${fmtW(t.gmv)}</td><td>${rr(t)}</td><td>${t.goal>0?'¥'+fmtW(t.goal):'—'}</td>${t.goal>0?`<td>${(t.realGmv/t.goal*100).toFixed(1)}%</td>`:'<td>—</td>'}</tr>`+
+    '</tbody>';
+}
+
+/* ================= 小组对比 ================= */
+function groupAgg(){
+  const map={};
+  activeRows().forEach(r=>{
+    const gname=r['小组']; if(!gname)return;
+    const k=r._who+'|'+gname;
+    if(!map[k]) map[k]={key:k,name:gname,whoName:r._who==='aliu'?'阿留':'店播',gmv:0,realGmv:0,goal:0,leads:0,orders:0,refunds:0,cvrSum:0,cvrN:0,qis:new Set()};
+    const m=map[k];
+    m.gmv+=num(r['成交GMV含退款']); m.realGmv+=num(r['实际GMV']);
+    m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
+    const c=num(r['实际转化率']); if(c>0){m.cvrSum+=c;m.cvrN++;}
+    m.qis.add(r['期次']);
+    const g=num(r['目标GMV']); if(g>0)m.goal+=g;
+  });
+  const cnt={};
+  Object.values(map).forEach(m=>{cnt[m.name]=(cnt[m.name]||0)+1;});
+  return Object.values(map).map(m=>({...m,label:cnt[m.name]>1?m.name+'·'+m.whoName:m.name,
+    // 与飞书表口径一致：(订单量-退款订单量)/线索量
+    cvr:m.leads>0?(m.orders-m.refunds)/m.leads*100:0,
+    rate:m.goal>0?m.realGmv/m.goal*100:null})).sort((a,b)=>b.cvr-a.cvr||b.gmv-a.gmv);
+}
+let groupRowsAll=[];
+let groupKw='';
+function groupCharts(){
+  groupRowsAll=groupAgg();
+  const whos=state.who==='all'?['aliu','dianbo']:[state.who];
+  document.getElementById('groupSections').innerHTML=whos.map(w=>`
+    <div class="sec-title">${WHO_NAME[w]}小组成交 GMV 对比（按转化率从高到低，标签含 GMV 占比）</div>
+    <div class="card"><div class="chart" id="chartGroupGmv-${w}" style="height:420px"></div></div>
+    <div class="sec-title">${WHO_NAME[w]}小组转化率 与 GMV 完成率（红色虚线 = 转化率月度目标 ${cvrTargetOf(w)}%）</div>
+    <div class="card"><div class="chart" id="chartGroupRate-${w}" style="height:380px"></div></div>
+    <div class="sec-title">${WHO_NAME[w]}小组明细</div>
+    <div class="tbl-scroll"><table id="groupTable-${w}"></table></div>`).join('');
+  let shown=0,total=0;
+  whos.forEach(w=>{
+    const lineName=WHO_NAME[w];
+    const all=groupRowsAll.filter(g=>g.whoName===lineName);
+    const gs=all.filter(g=>!groupKw||g.name.includes(groupKw)||g.label.includes(groupKw)||[...g.qis].some(q=>q.includes(groupKw)));
+    shown+=gs.length; total+=all.length;
+    drawGroupTable(w,gs);
+    const c1=echarts.init(document.getElementById('chartGroupGmv-'+w));
+    const c2=echarts.init(document.getElementById('chartGroupRate-'+w));
+    charts['g1-'+w]=c1;charts['g2-'+w]=c2;
+    if(!gs.length){c1.clear();c2.clear();return;}
+    const totalGmv=all.reduce((s,g)=>s+g.gmv,0);
+    const share=g=>totalGmv>0?(g.gmv/totalGmv*100).toFixed(1)+'%':'—';
+    c1.setOption({
+      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:p=>{
+        const g=gs[p[0].dataIndex];
+        return `${g.label}（${g.whoName}）<br>成交GMV: ¥${fmtW(g.gmv)}<br>GMV占比: ${share(g)}<br>实际GMV: ¥${fmtW(g.realGmv)}<br>完成率: ${g.rate==null?'—':g.rate.toFixed(1)+'%'}<br>转化率: ${g.cvr.toFixed(2)}%`},...TT},
+      grid:{left:90,right:150,top:10,bottom:20},
+      xAxis:{type:'value',axisLabel:{color:'#667085',formatter:v=>(v/1e4).toFixed(0)+'万'},splitLine:GRID_S,axisLine:{show:false}},
+      yAxis:{type:'category',data:gs.map(g=>g.label),inverse:true,...AX,axisLine:{show:false}},
+      series:[{name:'成交GMV',type:'bar',data:gs.map(g=>g.gmv),barMaxWidth:18,
+        itemStyle:{borderRadius:[0,6,6,0],color:GRAD_HBLUE},
+        label:{show:true,position:'right',color:'#5a6377',fontWeight:600,formatter:p=>{const g=gs[p.dataIndex];return '¥'+fmtW(g.gmv)+' · '+share(g);}}}]},{notMerge:true});
+    const gr=gs.filter(g=>g.rate!=null);
+    // 目标线用该业务线真实的转化率月度目标（阿留24% / 店播14%），而不是写死的100%
+    const tgt=cvrTargetOf(w);
+    const cvrMax=Math.ceil(Math.max(tgt,...gr.map(g=>g.cvr),1)*1.15/3)*3;
+    c2.setOption({
+      tooltip:{trigger:'axis',...TT,formatter:p=>{
+        const g=gr[p[0].dataIndex]; if(!g) return '';
+        const goal=tgt?`<br>转化达成: ${(g.cvr/tgt*100).toFixed(1)}%（目标 ${tgt}%）`:'';
+        return `${g.label}（${g.whoName}）<br>实际转化率: <b>${g.cvr.toFixed(2)}%</b>${goal}<br>GMV完成率: <b>${g.rate==null?'—':g.rate.toFixed(1)+'%'}</b><br>线索 ${g.leads.toLocaleString()} · 有效订单 ${(g.orders-g.refunds).toLocaleString()}`}},
+      legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+      grid:{left:64,right:78,top:40,bottom:80},
+      xAxis:{type:'category',data:gr.map(g=>g.label),axisLabel:{color:'#667085',rotate:35},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
+      yAxis:[{type:'value',name:'转化率(%)',max:cvrMax,splitNumber:6,axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:GRID_S},
+             {type:'value',name:'完成率(%)',position:'right',max:120,interval:40,axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:{show:false},axisLine:{show:false}}],
+      series:[
+        {name:'实际转化率',type:'bar',data:gr.map(g=>+g.cvr.toFixed(2)),itemStyle:{color:GRAD_BLUE,borderRadius:[6,6,0,0]},barMaxWidth:24,
+         markLine:{silent:true,symbol:'none',lineStyle:{type:'dashed',color:'#e5484d',width:1.5},
+           label:{formatter:'转化目标 '+tgt+'%',color:'#e5484d',fontSize:11,fontWeight:700,position:'insideStartTop'},
+           data:[{yAxis:tgt}]}},
+        {name:'GMV完成率',type:'line',yAxisIndex:1,data:gr.map(g=>+g.rate.toFixed(1)),itemStyle:{color:'#2ea36c'},lineStyle:{width:2.5},smooth:true,symbolSize:6,
+         endLabel:{show:true,formatter:'{c}%',color:'#2ea36c',fontSize:11,fontWeight:700,offset:[12,0]}}]},{notMerge:true});
+  });
+  document.getElementById('groupCount').textContent=`筛选后共 ${shown} 个小组（当前口径共 ${total} 个）`;
+}
+function drawGroupTable(w,rows){
+  document.getElementById('groupTable-'+w).innerHTML=rows.length?
+    `<thead><tr><th>小组</th><th>归属</th><th>期次数</th><th>线索量</th><th>订单量</th><th>实际GMV</th><th>转化率</th><th>成交GMV</th><th>GMV占比</th><th>目标GMV</th><th>完成率</th></tr></thead><tbody>`+
+    rows.map(g=>{
+      const totalGmv=groupRowsAll.filter(x=>x.whoName===g.whoName).reduce((s,x)=>s+x.gmv,0);
+      const share=totalGmv>0?(g.gmv/totalGmv*100).toFixed(1)+'%':'—';
+      return `<tr><td><b>${g.label}</b></td><td>${g.whoName}</td><td>${g.qis.size}</td><td>${g.leads.toLocaleString()}</td><td>${g.orders.toLocaleString()}</td><td>¥${fmtW(g.realGmv)}</td><td>${g.cvr.toFixed(2)}%</td><td>¥${fmtW(g.gmv)}</td><td><b>${share}</b></td><td>${g.goal>0?'¥'+fmtW(g.goal):'—'}</td><td class="${g.rate!=null&&g.rate>=100?'down':g.rate!=null?'up':''}">${g.rate==null?'—':g.rate.toFixed(1)+'%'}</td></tr>`;}).join('')+'</tbody>'
+    :'<tbody><tr><td colspan="11" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
+}
+document.getElementById('groupSearch').addEventListener('input',e=>{
+  groupKw=e.target.value.trim();
+  const whos=state.who==='all'?['aliu','dianbo']:[state.who];
+  whos.forEach(w=>{
+    const lineName=WHO_NAME[w];
+    const all=groupRowsAll.filter(g=>g.whoName===lineName);
+    drawGroupTable(w,all.filter(g=>!groupKw||g.name.includes(groupKw)||g.label.includes(groupKw)||[...g.qis].some(q=>q.includes(groupKw))));
+  });
+});
+
+/* ================= 员工排名 ================= */
+const RANK_COLS=['排名','姓名','小组','成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
+const WHO_NAME={aliu:'阿留',dianbo:'店播'};
+function rankTableHtml(cols,rows){
+  if(!rows.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
+  return '<div class="tbl-scroll"><table>'+
+    `<thead><tr>${cols.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`+
+    rows.map(r=>{
+      const rk=String(r['排名']||'').trim();
+      const cls=['1','2','3'].includes(rk)?' class="r'+rk+'"':(['r1','r2','r3'].includes(rk)?' class="'+rk+'"':'');
+      return `<tr${cls}>`+cols.map(h=>{
+        const v=r[h]||''; const isMoney=h.includes('GMV')||h.includes('金额');
+        const isStr=['姓名','小组','排名','销售期次','业务线'].includes(h)||String(v).includes('%');
+        const shown=h==='排名'?v:(isMoney&&v&&v!=='0'?fmtMoney(num(v)):(isStr?v:num(v).toLocaleString('zh-CN')));
+        return `<td>${shown}</td>`;}).join('')+'</tr>';
+    }).join('')+'</tbody></table></div>';
+}
+function renderRank(){
+  const kw=document.getElementById('rankSearch').value.trim();
+  const filt=d=>(d&&d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)));
+  let html='',shown=0,total=0;
+  (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
+    const d=D.rank[w]||{rows:[]};
+    const rows=filt(d);
+    shown+=rows.length; total+=d.rows.length;
+    html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人）</div>`+rankTableHtml(RANK_COLS,rows);
+  });
+  document.getElementById('rankSections').innerHTML=html;
+  document.getElementById('rankCount').textContent=`筛选后共 ${shown} 人（原始 ${total} 人）`;
+}
+document.getElementById('rankSearch').addEventListener('input',renderRank);
+
+/* ================= 过程数据 ================= */
+let curProc='aliu';
+const PROC_CHART_FIELDS=['加微率','问卷率','课程预约率','总到课率','Day1完课率','Day2完课率','Day3完课率','追单率'];
+function setProcTab(name){
+  curProc=name;
+  document.querySelectorAll('#procSubtabs .subtab').forEach(b=>{
+    b.classList.toggle('active',b.dataset.proc===name);
+    b.classList.toggle('hidden',state.who!=='all'&&b.dataset.proc!==state.who);
+  });
+}
+function procChart(){
+  const dataBy={};
+  ['aliu','dianbo'].forEach(w=>{
+    dataBy[w]=(D.process[w]?.rows||[]).filter(r=>state.groups.has(r['小组']));
+  });
+  const avg=(list,f)=>list.length?+(list.reduce((s,r)=>s+num(r[f]),0)/list.length).toFixed(2):0;
+  const c=echarts.init(document.getElementById('chartProc'));
+  const series=[];
+  if(state.who!=='dianbo') series.push({name:'阿留均值',type:'bar',data:PROC_CHART_FIELDS.map(f=>avg(dataBy.aliu,f)),itemStyle:{color:GRAD_BLUE,borderRadius:[6,6,0,0]},barMaxWidth:24});
+  if(state.who!=='aliu') series.push({name:'店播均值',type:'bar',data:PROC_CHART_FIELDS.map(f=>avg(dataBy.dianbo,f)),itemStyle:{color:GRAD_ORANGE,borderRadius:[6,6,0,0]},barMaxWidth:24});
+  c.setOption({
+    tooltip:{trigger:'axis',valueFormatter:v=>v+'%',...TT},legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+    grid:{left:50,right:30,top:40,bottom:30},
+    xAxis:{type:'category',data:PROC_CHART_FIELDS,axisLabel:{color:'#667085',interval:0,rotate:20},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
+    yAxis:{type:'value',axisLabel:{color:'#667085',formatter:'{value}%'},splitLine:GRID_S,axisLine:{show:false}},
+    series},{notMerge:true});
+  charts.proc=c;
+}
+function renderProc(){
+  const d=D.process[curProc]||{rows:[],header:[]};
+  const cols=d.header.filter(Boolean);
+  const kw=document.getElementById('procSearch').value.trim();
+  const rows=d.rows.filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)));
+  document.getElementById('procTable').innerHTML=rows.length?
+    `<thead><tr>${cols.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`+
+    rows.map(r=>`<tr>`+cols.map(h=>{
+      const v=(r[h]||'').trim(); const isRate=h.includes('率');
+      return `<td>${v===''?'—':isRate&&v&&!v.includes('%')?num(v).toFixed(2)+'%':v}</td>`;}).join('')+'</tr>').join('')+'</tbody>'
+    :'<tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
+}
+document.getElementById('procSubtabs').addEventListener('click',e=>{
+  if(!e.target.dataset.proc)return;
+  setProcTab(e.target.dataset.proc); renderProc();
+});
+document.getElementById('procSearch').addEventListener('input',renderProc);
+
+/* ================= 总渲染 ================= */
+function renderAll(){
+  refreshTip();
+  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); procChart(); renderProc();
+}
+window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c&&c.resize()));
+if(window.echarts){
+  refreshOptions(false);
+  renderAll();
+  // 每 15 分钟静默拉取最新 data.js；数据有变化才重绘，筛选状态保留
+  setInterval(()=>{
+    const prev=D.updated_at;
+    const s=document.createElement('script');
+    s.src='data.js?t='+Date.now();
+    s.onload=()=>{
+      if(window.DASH && window.DASH.updated_at!==prev){
+        D=window.DASH;
+        document.getElementById('updated').textContent=D.updated_at;
+        document.getElementById('updated2').textContent=D.updated_at;
+        refreshOptions(true); renderAll();
+      }
+      s.remove();
+    };
+    s.onerror=()=>s.remove();
+    document.body.appendChild(s);
+  }, 15*60*1000);
+}else{
+  document.body.innerHTML='<div class="empty-tip">图表库加载失败，请检查网络后刷新页面</div>';
+}
+</script>
+</body>
+</html>
