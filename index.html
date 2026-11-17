@@ -149,6 +149,7 @@
   .toolbar{display:flex;align-items:center;margin-bottom:11px;gap:10px}
   th.sortable{cursor:pointer;user-select:none}
   th.sortable:hover{color:var(--primary);background:#f0f3ff}
+  th.sortable.on{color:var(--primary);background:#f0f3ff}
   th.sortable .arrow{color:var(--primary);font-size:11px}
   .rank-ctl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sub);font-weight:600;margin-left:auto}
   .rank-ctl select{padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
@@ -430,6 +431,29 @@ function aggRows(rows){
   return s;
 }
 
+/* ================= 通用表头排序工具 ================= */
+function applySort(rows,cfg,getter){
+  if(!cfg||!cfg.field) return rows;
+  const empty=v=>v==null||v===''||(typeof v==='number'&&!isFinite(v));
+  return [...rows].sort((a,b)=>{
+    const va=getter(a,cfg.field), vb=getter(b,cfg.field);
+    if(empty(va)&&empty(vb)) return 0;
+    if(empty(va)) return 1;
+    if(empty(vb)) return -1;
+    let r;
+    if(typeof va==='string'||typeof vb==='string'){
+      const sa=String(va), sb=String(vb);
+      r=/^-?[\d,.¥%\s]+$/.test(sa)&&/^-?[\d,.¥%\s]+$/.test(sb)?num(sa)-num(sb):sa.localeCompare(sb,'zh-CN',{numeric:true});
+    } else r=va-vb;
+    return cfg.dir==='desc'?-r:r;
+  });
+}
+function sortTh(label,key,cfg,prefix){
+  const on=cfg.field===key;
+  return `<th class="sortable${on?' on':''}" data-${prefix}="${key}">${label}${on?`<span class="arrow">${cfg.dir==='desc'?'↓':'↑'}</span>`:''}</th>`;
+}
+function toggleSort(cfg,key){ if(cfg.field===key) cfg.dir=cfg.dir==='desc'?'asc':'desc'; else { cfg.field=key; cfg.dir='desc'; } }
+
 /* ================= 页签 ================= */
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
@@ -549,6 +573,22 @@ function trendCharts(){
 }
 
 /* ================= 各期次明细 ================= */
+const qiSort={field:'',dir:'desc'};   /* 空 field = 按期次自然顺序 */
+function qiVal(m,f){
+  switch(f){
+    case 'qi': return m.qi;
+    case 'who': return m.who==='aliu'?'阿留':'店播';
+    case 'leads': return m.leads;
+    case 'orders': return m.orders;
+    case 'realGmv': return m.realGmv;
+    case 'cvr': return m.leads>0?(m.orders-m.refunds)/m.leads*100:null;
+    case 'gmv': return m.gmv;
+    case 'rref': return m.orders>0?m.refunds/m.orders*100:null;
+    case 'goal': return m.goal||null;
+    case 'rate': return m.goal>0?m.realGmv/m.goal*100:null;
+  }
+  return null;
+}
 function renderQiTable(){
   const rows=activeRows();
   const map={};
@@ -560,7 +600,7 @@ function renderQiTable(){
     m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
     const g=num(r['目标GMV']); if(g>0)m.goal+=g;
   });
-  const arr=Object.values(map).sort((a,b)=>a.qi.localeCompare(b.qi,undefined,{numeric:true})||a.who.localeCompare(b.who));
+  const arr=applySort(Object.values(map).sort((a,b)=>a.qi.localeCompare(b.qi,undefined,{numeric:true})||a.who.localeCompare(b.who)),qiSort,qiVal);
   const el=document.getElementById('qiTable');
   if(!arr.length){ el.innerHTML='<tbody><tr><td class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>'; return; }
   const t={leads:0,orders:0,gmv:0,realGmv:0,goal:0,refunds:0};
@@ -571,13 +611,33 @@ function renderQiTable(){
   const rateCell=m=>m.goal>0?`<td class="${m.realGmv/m.goal*100>=100?'down':'up'}">${(m.realGmv/m.goal*100).toFixed(1)}%</td>`:'<td>—</td>';
   const whoTag=w=>`<span class="who who-${w}">${w==='aliu'?'阿留':'店播'}</span>`;
   el.innerHTML=
-    `<thead><tr><th>期次</th><th>归属</th><th>线索量</th><th>订单量</th><th>实际GMV</th><th>转化率</th><th>成交GMV</th><th>退款率</th><th>目标GMV</th><th>完成率</th></tr></thead><tbody>`+
+    `<thead><tr>${sortTh('期次','qi',qiSort,'qs')}${sortTh('归属','who',qiSort,'qs')}${sortTh('线索量','leads',qiSort,'qs')}${sortTh('订单量','orders',qiSort,'qs')}${sortTh('实际GMV','realGmv',qiSort,'qs')}${sortTh('转化率','cvr',qiSort,'qs')}${sortTh('成交GMV','gmv',qiSort,'qs')}${sortTh('退款率','rref',qiSort,'qs')}${sortTh('目标GMV','goal',qiSort,'qs')}${sortTh('完成率','rate',qiSort,'qs')}</tr></thead><tbody>`+
     arr.map(m=>`<tr><td><b>${m.qi}</b></td><td>${whoTag(m.who)}</td><td>${m.leads.toLocaleString()}</td><td>${m.orders.toLocaleString()}</td><td>¥${fmtW(m.realGmv)}</td><td>${cvr(m)}</td><td>¥${fmtW(m.gmv)}</td><td>${rr(m)}</td><td>${m.goal>0?'¥'+fmtW(m.goal):'—'}</td>${rateCell(m)}</tr>`).join('')+
     `<tr class="total-row"><td><b>合计</b></td><td></td><td>${t.leads.toLocaleString()}</td><td>${t.orders.toLocaleString()}</td><td>¥${fmtW(t.realGmv)}</td><td>${cvr(t)}</td><td>¥${fmtW(t.gmv)}</td><td>${rr(t)}</td><td>${t.goal>0?'¥'+fmtW(t.goal):'—'}</td>${t.goal>0?`<td>${(t.realGmv/t.goal*100).toFixed(1)}%</td>`:'<td>—</td>'}</tr>`+
-    '</tbody>';
+    `</tbody>`;
 }
+document.getElementById('qiTable').addEventListener('click',e=>{
+  const th=e.target.closest('th[data-qs]'); if(!th)return;
+  toggleSort(qiSort,th.dataset.qs); renderQiTable();
+});
 
 /* ================= 小组对比 ================= */
+const groupSort={field:'cvr',dir:'desc'};
+function groupVal(g,f){
+  switch(f){
+    case 'label': return g.label;
+    case 'who': return g.whoName;
+    case 'qis': return g.qis.size;
+    case 'leads': return g.leads;
+    case 'orders': return g.orders;
+    case 'realGmv': return g.realGmv;
+    case 'cvr': return g.cvr;
+    case 'gmv': case 'share': return g.gmv;
+    case 'goal': return g.goal||null;
+    case 'rate': return g.rate;
+  }
+  return null;
+}
 function groupAgg(){
   const map={};
   activeRows().forEach(r=>{
@@ -658,22 +718,29 @@ function groupCharts(){
   document.getElementById('groupCount').textContent=`筛选后共 ${shown} 个小组（当前口径共 ${total} 个）`;
 }
 function drawGroupTable(w,rows){
-  document.getElementById('groupTable-'+w).innerHTML=rows.length?
-    `<thead><tr><th>小组</th><th>归属</th><th>期次数</th><th>线索量</th><th>订单量</th><th>实际GMV</th><th>转化率</th><th>成交GMV</th><th>GMV占比</th><th>目标GMV</th><th>完成率</th></tr></thead><tbody>`+
-    rows.map(g=>{
-      const totalGmv=groupRowsAll.filter(x=>x.whoName===g.whoName).reduce((s,x)=>s+x.gmv,0);
+  const sorted=applySort(rows,groupSort,groupVal);
+  const totalGmv=groupRowsAll.filter(x=>x.whoName===WHO_NAME[w]).reduce((s,x)=>s+x.gmv,0);
+  document.getElementById('groupTable-'+w).innerHTML=sorted.length?
+    `<thead><tr>${sortTh('小组','label',groupSort,'gs')}${sortTh('归属','who',groupSort,'gs')}${sortTh('期次数','qis',groupSort,'gs')}${sortTh('线索量','leads',groupSort,'gs')}${sortTh('订单量','orders',groupSort,'gs')}${sortTh('实际GMV','realGmv',groupSort,'gs')}${sortTh('转化率','cvr',groupSort,'gs')}${sortTh('成交GMV','gmv',groupSort,'gs')}${sortTh('GMV占比','share',groupSort,'gs')}${sortTh('目标GMV','goal',groupSort,'gs')}${sortTh('完成率','rate',groupSort,'gs')}</tr></thead><tbody>`+
+    sorted.map(g=>{
       const share=totalGmv>0?(g.gmv/totalGmv*100).toFixed(1)+'%':'—';
       return `<tr><td><b>${g.label}</b></td><td>${g.whoName}</td><td>${g.qis.size}</td><td>${g.leads.toLocaleString()}</td><td>${g.orders.toLocaleString()}</td><td>¥${fmtW(g.realGmv)}</td><td>${g.cvr.toFixed(2)}%</td><td>¥${fmtW(g.gmv)}</td><td><b>${share}</b></td><td>${g.goal>0?'¥'+fmtW(g.goal):'—'}</td><td class="${g.rate!=null&&g.rate>=100?'down':g.rate!=null?'up':''}">${g.rate==null?'—':g.rate.toFixed(1)+'%'}</td></tr>`;}).join('')+'</tbody>'
     :'<tbody><tr><td colspan="11" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
 }
-document.getElementById('groupSearch').addEventListener('input',e=>{
-  groupKw=e.target.value.trim();
-  const whos=state.who==='all'?['aliu','dianbo']:[state.who];
-  whos.forEach(w=>{
+function redrawGroupTables(){
+  (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
     const lineName=WHO_NAME[w];
     const all=groupRowsAll.filter(g=>g.whoName===lineName);
     drawGroupTable(w,all.filter(g=>!groupKw||g.name.includes(groupKw)||g.label.includes(groupKw)||[...g.qis].some(q=>q.includes(groupKw))));
   });
+}
+document.getElementById('groupSections').addEventListener('click',e=>{
+  const th=e.target.closest('th[data-gs]'); if(!th)return;
+  toggleSort(groupSort,th.dataset.gs); redrawGroupTables();
+});
+document.getElementById('groupSearch').addEventListener('input',e=>{
+  groupKw=e.target.value.trim();
+  redrawGroupTables();
 });
 
 /* ================= 员工排名 ================= */
@@ -790,10 +857,26 @@ function regionAggByGroup(rows){
     refRate:m.orders>0?m.refunds/m.orders*100:0,
     rate:m.goal>0?m.realGmv/m.goal*100:null})).sort((a,b)=>b.realGmv-a.realGmv);
 }
+const regSort={field:'realGmv',dir:'desc'};
+function regVal(g,f){
+  switch(f){
+    case 'name': return g.name;
+    case 'qis': return g.qis.size;
+    case 'leads': return g.leads;
+    case 'orders': return g.orders;
+    case 'realGmv': return g.realGmv;
+    case 'gmv': return g.gmv;
+    case 'cvr': return g.cvr;
+    case 'refRate': return g.refRate;
+    case 'rate': return g.rate;
+  }
+  return null;
+}
 function regionTableHtml(gs){
   if(!gs.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="9" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
-  return `<div class="tbl-scroll"><table><thead><tr><th>小组</th><th>期次数</th><th>线索量</th><th>订单量</th><th>实际GMV</th><th>成交GMV</th><th>实际转化率</th><th>退款率</th><th>完成率</th></tr></thead><tbody>`+
-    gs.map(g=>`<tr><td><b>${g.name}</b></td><td>${g.qis.size}</td><td>${g.leads.toLocaleString('zh-CN')}</td><td>${g.orders.toLocaleString('zh-CN')}</td><td><b>¥${fmtW(g.realGmv)}</b></td><td>¥${fmtW(g.gmv)}</td><td>${g.cvr.toFixed(2)}%</td><td>${g.refRate.toFixed(2)}%</td><td class="${g.rate!=null&&g.rate>=100?'down':g.rate!=null?'up':''}">${g.rate==null?'—':g.rate.toFixed(1)+'%'}</td></tr>`).join('')+
+  const sorted=applySort(gs,regSort,regVal);
+  return `<div class="tbl-scroll"><table><thead><tr>${sortTh('小组','name',regSort,'rs')}${sortTh('期次数','qis',regSort,'rs')}${sortTh('线索量','leads',regSort,'rs')}${sortTh('订单量','orders',regSort,'rs')}${sortTh('实际GMV','realGmv',regSort,'rs')}${sortTh('成交GMV','gmv',regSort,'rs')}${sortTh('实际转化率','cvr',regSort,'rs')}${sortTh('退款率','refRate',regSort,'rs')}${sortTh('完成率','rate',regSort,'rs')}</tr></thead><tbody>`+
+    sorted.map(g=>`<tr><td><b>${g.name}</b></td><td>${g.qis.size}</td><td>${g.leads.toLocaleString('zh-CN')}</td><td>${g.orders.toLocaleString('zh-CN')}</td><td><b>¥${fmtW(g.realGmv)}</b></td><td>¥${fmtW(g.gmv)}</td><td>${g.cvr.toFixed(2)}%</td><td>${g.refRate.toFixed(2)}%</td><td class="${g.rate!=null&&g.rate>=100?'down':g.rate!=null?'up':''}">${g.rate==null?'—':g.rate.toFixed(1)+'%'}</td></tr>`).join('')+
     `</tbody></table></div>`;
 }
 function renderRegion(){
@@ -858,6 +941,10 @@ function renderRegion(){
   });
 }
 document.getElementById('regionSearch').addEventListener('input',e=>{ regionKw=e.target.value.trim(); renderRegion(); });
+document.getElementById('regionSections').addEventListener('click',e=>{
+  const th=e.target.closest('th[data-rs]'); if(!th)return;
+  toggleSort(regSort,th.dataset.rs); renderRegion();
+});
 
 /* ================= 过程数据 ================= */
 let curProc='aliu';
@@ -887,18 +974,23 @@ function procChart(){
     series},{notMerge:true});
   charts.proc=c;
 }
+const procSort={field:'',dir:'desc'};   /* 空 field = 表格原始顺序 */
 function renderProc(){
   const d=D.process[curProc]||{rows:[],header:[]};
   const cols=d.header.filter(Boolean);
   const kw=document.getElementById('procSearch').value.trim();
-  const rows=d.rows.filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)));
+  const rows=applySort(d.rows.filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))),procSort,(r,f)=>r[f]);
   document.getElementById('procTable').innerHTML=rows.length?
-    `<thead><tr>${cols.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`+
+    `<thead><tr>${cols.map(h=>sortTh(h,h,procSort,'ps')).join('')}</tr></thead><tbody>`+
     rows.map(r=>`<tr>`+cols.map(h=>{
       const v=(r[h]||'').trim(); const isRate=h.includes('率');
       return `<td>${v===''?'—':isRate&&v&&!v.includes('%')?num(v).toFixed(2)+'%':v}</td>`;}).join('')+'</tr>').join('')+'</tbody>'
     :'<tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
 }
+document.getElementById('procTable').addEventListener('click',e=>{
+  const th=e.target.closest('th[data-ps]'); if(!th)return;
+  toggleSort(procSort,th.dataset.ps); renderProc();
+});
 document.getElementById('procSubtabs').addEventListener('click',e=>{
   if(!e.target.dataset.proc)return;
   setProcTab(e.target.dataset.proc); renderProc();
