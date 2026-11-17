@@ -147,6 +147,15 @@
   .search::placeholder{color:#9aa3b5}
   .search:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(79,110,242,.12)}
   .toolbar{display:flex;align-items:center;margin-bottom:11px;gap:10px}
+  th.sortable{cursor:pointer;user-select:none}
+  th.sortable:hover{color:var(--primary);background:#f0f3ff}
+  th.sortable .arrow{color:var(--primary);font-size:11px}
+  .rank-ctl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sub);font-weight:600;margin-left:auto}
+  .rank-ctl select{padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
+    font-size:13px;outline:none;cursor:pointer;font-weight:500;transition:all .18s ease}
+  .rank-ctl select:hover{border-color:#b9c5ff;color:var(--primary)}
+  .rank-ctl select:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(79,110,242,.12)}
+  .rank-tip{color:#c47d09;font-size:12px;background:#fff8ec;border:1px solid #ffe4b8;border-radius:9px;padding:6px 12px;margin-bottom:11px}
   .foot{color:#8a93a6;font-size:12px;text-align:center;margin-top:44px;line-height:1.9}
   .foot a{color:var(--primary);text-decoration:none}
   .foot a:hover{text-decoration:underline}
@@ -224,8 +233,14 @@
   <div class="page" id="page-rank">
     <div class="toolbar">
       <span style="color:var(--sub);font-size:12px" id="rankCount"></span>
-      <input class="search" id="rankSearch" placeholder="搜索姓名 / 小组…">
+      <div class="rank-ctl">
+        <span>排序</span>
+        <select id="rankSortSel"></select>
+        <button class="chip-mini on" id="rankDirBtn" style="padding:7px 12px">降序</button>
+      </div>
+      <input class="search" id="rankSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
     </div>
+    <div class="rank-tip" id="rankQiTip" style="display:none">提示：员工排名为月度累计口径（源表无按期次的员工明细），期次筛选不影响本页排名；排名会随归属 / 小组 / 搜索筛选动态重算。</div>
     <div id="rankSections"></div>
   </div>
 
@@ -248,7 +263,7 @@
   </div>
 </div>
 
-<script src="data.js?v=2"></script>
+<script src="data.js?v=3"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -643,15 +658,23 @@ document.getElementById('groupSearch').addEventListener('input',e=>{
 /* ================= 员工排名 ================= */
 const RANK_COLS=['排名','姓名','小组','成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
 const WHO_NAME={aliu:'阿留',dianbo:'店播'};
+/* 可排序的数值列 + 排序状态（名次始终按主指标「成交GMV(含退款)」在当前筛选内降序重算） */
+const RANK_SORTABLE=['成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
+const RANK_PRIMARY='成交GMV(含退款)';
+let rankSort={field:RANK_PRIMARY,dir:'desc'};
 function rankTableHtml(cols,rows){
   if(!rows.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
+  const arrow=f=>rankSort.field===f?`<span class="arrow">${rankSort.dir==='desc'?'↓':'↑'}</span>`:'';
   return '<div class="tbl-scroll"><table>'+
-    `<thead><tr>${cols.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`+
+    `<thead><tr>${cols.map(h=>{
+      const s=RANK_SORTABLE.includes(h);
+      return `<th${s?` class="sortable" data-sort="${h}"`:''}>${h}${s?arrow(h):''}</th>`;
+    }).join('')}</tr></thead><tbody>`+
     rows.map(r=>{
-      const rk=String(r['排名']||'').trim();
-      const cls=['1','2','3'].includes(rk)?' class="r'+rk+'"':(['r1','r2','r3'].includes(rk)?' class="'+rk+'"':'');
+      const rk=String(r._rank||'');
+      const cls=['1','2','3'].includes(rk)?' class="r'+rk+'"':'';
       return `<tr${cls}>`+cols.map(h=>{
-        const v=r[h]||''; const isMoney=h.includes('GMV')||h.includes('金额');
+        const v=h==='排名'?rk:(r[h]||''); const isMoney=h.includes('GMV')||h.includes('金额');
         const isStr=['姓名','小组','排名','销售期次','业务线'].includes(h)||String(v).includes('%');
         const shown=h==='排名'?v:(isMoney&&v&&v!=='0'?fmtMoney(num(v)):(isStr?v:num(v).toLocaleString('zh-CN')));
         return `<td>${shown}</td>`;}).join('')+'</tr>';
@@ -663,13 +686,39 @@ function renderRank(){
   let html='',shown=0,total=0;
   (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
     const d=D.rank[w]||{rows:[]};
-    const rows=filt(d);
+    const rows=filt(d).map(r=>({...r}));
     shown+=rows.length; total+=d.rows.length;
-    html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人）</div>`+rankTableHtml(RANK_COLS,rows);
+    // 动态名次：按主指标在「当前筛选结果」内降序重新计算 1..N（不再沿用飞书表的静态名次）
+    [...rows].sort((a,b)=>num(b[RANK_PRIMARY])-num(a[RANK_PRIMARY])).forEach((r,i)=>{r._rank=i+1;});
+    // 显示顺序按排序控件（下拉或点击表头均可调整）
+    rows.sort((a,b)=>{
+      const va=num(a[rankSort.field]),vb=num(b[rankSort.field]);
+      return rankSort.dir==='desc'?vb-va:va-vb;
+    });
+    html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次随筛选动态重算）</div>`+rankTableHtml(RANK_COLS,rows);
   });
   document.getElementById('rankSections').innerHTML=html;
   document.getElementById('rankCount').textContent=`筛选后共 ${shown} 人（原始 ${total} 人）`;
+  document.getElementById('rankQiTip').style.display = state.qis.size!==allQis.length?'':'none';
 }
+const rankSortSel=document.getElementById('rankSortSel');
+rankSortSel.innerHTML=RANK_SORTABLE.map(f=>`<option value="${f}">${f}</option>`).join('');
+rankSortSel.value=rankSort.field;
+rankSortSel.addEventListener('change',e=>{ rankSort.field=e.target.value; renderRank(); });
+document.getElementById('rankDirBtn').addEventListener('click',()=>{
+  rankSort.dir=rankSort.dir==='desc'?'asc':'desc';
+  document.getElementById('rankDirBtn').textContent=rankSort.dir==='desc'?'降序':'升序';
+  renderRank();
+});
+document.getElementById('rankSections').addEventListener('click',e=>{
+  const th=e.target.closest('th[data-sort]'); if(!th)return;
+  const f=th.dataset.sort;
+  if(rankSort.field===f) rankSort.dir=rankSort.dir==='desc'?'asc':'desc';
+  else { rankSort.field=f; rankSort.dir='desc'; }
+  rankSortSel.value=f;
+  document.getElementById('rankDirBtn').textContent=rankSort.dir==='desc'?'降序':'升序';
+  renderRank();
+});
 document.getElementById('rankSearch').addEventListener('input',renderRank);
 
 /* ================= 过程数据 ================= */
