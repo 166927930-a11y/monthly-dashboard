@@ -156,6 +156,17 @@
   .rank-ctl select:hover{border-color:#b9c5ff;color:var(--primary)}
   .rank-ctl select:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(79,110,242,.12)}
   .rank-tip{color:#c47d09;font-size:12px;background:#fff8ec;border:1px solid #ffe4b8;border-radius:9px;padding:6px 12px;margin-bottom:11px}
+  /* ---------- 阿留分区 ---------- */
+  .reg-block{margin-bottom:30px}
+  .reg-head{display:flex;align-items:center;gap:12px;margin:6px 0 14px;flex-wrap:wrap}
+  .reg-badge{font-size:15px;font-weight:800;color:#fff;padding:7px 18px;border-radius:11px;letter-spacing:.4px;
+    box-shadow:0 6px 16px rgba(23,28,38,.16)}
+  .reg-badge.wh{background:linear-gradient(120deg,#4f6ef2,#6d5cf0)}
+  .reg-badge.sz{background:linear-gradient(120deg,#2ea36c,#4bbd8a)}
+  .reg-badge.ot{background:linear-gradient(120deg,#f59e0b,#ffb347)}
+  .reg-meta{color:var(--sub);font-size:12.5px}
+  .reg-gmv{margin-left:auto;font-size:13px;color:var(--sub);font-weight:600}
+  .reg-gmv b{color:var(--ink);font-size:19px;font-weight:800;letter-spacing:-.3px}
   .foot{color:#8a93a6;font-size:12px;text-align:center;margin-top:44px;line-height:1.9}
   .foot a{color:var(--primary);text-decoration:none}
   .foot a:hover{text-decoration:underline}
@@ -172,6 +183,7 @@
       <button class="tab active" data-page="overview">总览</button>
       <button class="tab" data-page="groups">小组对比</button>
       <button class="tab" data-page="rank">员工排名</button>
+      <button class="tab" data-page="region">阿留分区</button>
       <button class="tab" data-page="process">过程数据</button>
     </div>
   </div>
@@ -240,8 +252,17 @@
       </div>
       <input class="search" id="rankSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
     </div>
-    <div class="rank-tip" id="rankQiTip"><b>两种口径</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表，每期名次按成交GMV动态重算，可点击表头或用排序控件换指标）。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
+    <div class="rank-tip" id="rankQiTip"><b>两种口径</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表）。<b>名次与 🥇🥈🥉 跟随当前排序指标</b>——换指标或点表头，名次和金银铜牌一起重排。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
     <div id="rankSections"></div>
+  </div>
+
+  <!-- ============ 阿留分区 ============ -->
+  <div class="page" id="page-region">
+    <div class="toolbar">
+      <span class="slicer-tip" id="regionTip"></span>
+      <input class="search" id="regionSearch" style="margin-left:auto" placeholder="搜索小组…">
+    </div>
+    <div id="regionSections"></div>
   </div>
 
   <!-- ============ 过程数据 ============ -->
@@ -699,24 +720,25 @@ function renderRank(){
         const rows=src.filter(r=>r['期次']===qi&&state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
         if(!rows.length) return;
         shown+=rows.length;
-        [...rows].sort((a,b)=>num(b[RANK_PRIMARY])-num(a[RANK_PRIMARY])).forEach((r,i)=>{r._rank=i+1;});
-        const sf=rows[0]&&rankSort.field in rows[0]?rankSort.field:RANK_PRIMARY;
+        /* 名次与金银铜牌跟随当前排序指标：先按排序字段排好，再依次赋予 1..N */
+        const sf=rows[0]&&(rankSort.field in rows[0])?rankSort.field:RANK_PRIMARY;
         rows.sort((a,b)=>{const va=num(a[sf]),vb=num(b[sf]);return rankSort.dir==='desc'?vb-va:va-vb;});
-        html+=`<div class="sec-title">${WHO_NAME[w]} · ${qi} 员工排名（${rows.length} 人）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
+        rows.forEach((r,i)=>{r._rank=i+1;});
+        html+=`<div class="sec-title">${WHO_NAME[w]} · ${qi} 员工排名（${rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
       });
     }else{
       /* ---- 月度累计模式（不选期次时） ---- */
       const d=D.rank[w]||{rows:[]};
       const rows=filt(d).map(r=>({...r}));
       shown+=rows.length; total+=d.rows.length;
-      // 动态名次：按主指标在「当前筛选结果」内降序重新计算 1..N（不再沿用飞书表的静态名次）
-      [...rows].sort((a,b)=>num(b[RANK_PRIMARY])-num(a[RANK_PRIMARY])).forEach((r,i)=>{r._rank=i+1;});
-      // 显示顺序按排序控件（下拉或点击表头均可调整）
+      /* 名次与金银铜牌跟随当前排序指标：先按排序字段排好，再依次赋予 1..N */
+      const sf=rows[0]&&(rankSort.field in rows[0])?rankSort.field:RANK_PRIMARY;
       rows.sort((a,b)=>{
-        const va=num(a[rankSort.field]),vb=num(b[rankSort.field]);
+        const va=num(a[sf]),vb=num(b[sf]);
         return rankSort.dir==='desc'?vb-va:va-vb;
       });
-      html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次随筛选动态重算）</div>`+rankTableHtml(RANK_COLS,rows,RANK_SORTABLE);
+      rows.forEach((r,i)=>{r._rank=i+1;});
+      html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(RANK_COLS,rows,RANK_SORTABLE);
     }
   });
   document.getElementById('rankSections').innerHTML=html||'<div class="empty-tip" style="padding:24px;text-align:center;color:var(--sub)">没有匹配的期次明细数据</div>';
@@ -743,6 +765,98 @@ document.getElementById('rankSections').addEventListener('click',e=>{
   renderRank();
 });
 document.getElementById('rankSearch').addEventListener('input',renderRank);
+
+/* ================= 阿留分区（武汉 / 深圳） ================= */
+const REGION_DEFS=[
+  {key:'wuhan',name:'武汉片区',cls:'wh',test:g=>g.startsWith('武汉')},
+  {key:'shenzhen',name:'深圳片区',cls:'sz',test:g=>g.startsWith('深圳')},
+  {key:'other',name:'其他片区',cls:'ot',test:g=>!(g.startsWith('武汉')||g.startsWith('深圳'))},
+];
+let regionKw='';
+function regionAggByGroup(rows){
+  const map={};
+  rows.forEach(r=>{
+    const g=r['小组']; if(!g)return;
+    if(!map[g]) map[g]={name:g,gmv:0,realGmv:0,goal:0,leads:0,orders:0,refunds:0,qis:new Set()};
+    const m=map[g];
+    m.gmv+=num(r['成交GMV含退款']); m.realGmv+=num(r['实际GMV']);
+    m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
+    const gl=num(r['目标GMV']); if(gl>0)m.goal+=gl;
+    m.qis.add(r['期次']);
+  });
+  return Object.values(map).map(m=>({...m,
+    cvr:m.leads>0?(m.orders-m.refunds)/m.leads*100:0,
+    refRate:m.orders>0?m.refunds/m.orders*100:0,
+    rate:m.goal>0?m.realGmv/m.goal*100:null})).sort((a,b)=>b.realGmv-a.realGmv);
+}
+function regionTableHtml(gs){
+  if(!gs.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="9" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
+  return `<div class="tbl-scroll"><table><thead><tr><th>小组</th><th>期次数</th><th>线索量</th><th>订单量</th><th>实际GMV</th><th>成交GMV</th><th>实际转化率</th><th>退款率</th><th>完成率</th></tr></thead><tbody>`+
+    gs.map(g=>`<tr><td><b>${g.name}</b></td><td>${g.qis.size}</td><td>${g.leads.toLocaleString('zh-CN')}</td><td>${g.orders.toLocaleString('zh-CN')}</td><td><b>¥${fmtW(g.realGmv)}</b></td><td>¥${fmtW(g.gmv)}</td><td>${g.cvr.toFixed(2)}%</td><td>${g.refRate.toFixed(2)}%</td><td class="${g.rate!=null&&g.rate>=100?'down':g.rate!=null?'up':''}">${g.rate==null?'—':g.rate.toFixed(1)+'%'}</td></tr>`).join('')+
+    `</tbody></table></div>`;
+}
+function renderRegion(){
+  const base=(D.aliu.groups||[]).filter(r=>state.qis.has(r['期次'])&&state.groups.has(r['小组'])&&(!regionKw||(r['小组']||'').includes(regionKw)));
+  document.getElementById('regionTip').textContent=
+    `阿留按城市拆分（本页仅看阿留）· 期次 ${state.qis.size}/${allQis.length} · 小组 ${state.groups.size}/${allGroups.length}`;
+  const blocks=REGION_DEFS.map(def=>({def,rows:base.filter(r=>def.test(r['小组']))})).filter(b=>b.rows.length);
+  const box=document.getElementById('regionSections');
+  if(!blocks.length){ box.innerHTML='<div class="empty-tip">当前筛选条件下没有阿留数据</div>'; return; }
+  const tag='<span class="who who-aliu">阿留</span>';
+  box.innerHTML=blocks.map(({def,rows})=>{
+    const s=aggRows(rows), gs=regionAggByGroup(rows);
+    const kpis=[
+      kpiCard('实际 GMV',tag,fmtMoney(s.实际GMV),s.目标GMV>0?'目标 ¥'+fmtW(s.目标GMV):''),
+      kpiCard('成交 GMV',tag,fmtMoney(s.成交GMV含退款),'含退款口径'),
+      kpiCard('线索量',tag,s.线索量.toLocaleString('zh-CN'),''),
+      kpiCard('订单量',tag,s.订单量.toLocaleString('zh-CN'),'退款订单 '+s.退款订单量),
+      kpiCard('实际转化率',tag,s.转化率.toFixed(2)+'%','有效订单 '+(s.订单量-s.退款订单量).toLocaleString()),
+      kpiCard('GMV 完成率',tag,s.完成率==null?'—':s.完成率.toFixed(1)+'%',''),
+    ].join('');
+    return `<div class="reg-block">
+      <div class="reg-head">
+        <span class="reg-badge ${def.cls}">${def.name}</span>
+        <span class="reg-meta">${gs.length} 个小组 · ${new Set(rows.map(r=>r['期次'])).size} 个期次</span>
+        <span class="reg-gmv">实际GMV <b>¥${fmtW(s.实际GMV)}</b></span>
+      </div>
+      <div class="kpi-grid">${kpis}</div>
+      <div class="sec-title">${def.name} · 分期次 GMV 与转化率</div>
+      <div class="card"><div class="chart" id="chartReg-${def.key}" style="height:300px"></div></div>
+      <div class="sec-title">${def.name} · 小组明细（按实际GMV降序）</div>
+      ${regionTableHtml(gs)}
+    </div>`;
+  }).join('');
+  blocks.forEach(({def,rows})=>{
+    const el=document.getElementById('chartReg-'+def.key); if(!el)return;
+    const byQi={};
+    rows.forEach(r=>{
+      const q=r['期次']; if(!byQi[q]) byQi[q]={gmv:0,leads:0,orders:0,refunds:0};
+      const m=byQi[q];
+      m.gmv+=num(r['实际GMV']); m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
+    });
+    const qs=Object.keys(byQi).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+    const cvrOf=q=>{const m=byQi[q];return +(m.leads>0?(m.orders-m.refunds)/m.leads*100:0).toFixed(2);};
+    const color=def.key==='shenzhen'
+      ?new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#5ecb99'},{offset:1,color:'#2ea36c'}])
+      :def.key==='other'?GRAD_ORANGE:GRAD_BLUE;
+    const c=echarts.init(el); charts['reg-'+def.key]=c;
+    c.setOption({
+      tooltip:{trigger:'axis',...TT,formatter:p=>{
+        const q=qs[p[0].dataIndex], m=byQi[q];
+        return `${def.name} · ${q}<br>实际GMV: <b>¥${fmtW(m.gmv)}</b><br>实际转化率: ${cvrOf(q).toFixed(2)}%<br>线索 ${m.leads.toLocaleString()} · 订单 ${m.orders.toLocaleString()}`;}},
+      legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+      grid:{left:64,right:64,top:40,bottom:34},
+      xAxis:{type:'category',data:qs,axisLabel:{color:'#667085'},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
+      yAxis:[{type:'value',name:'实际GMV',axisLabel:{color:'#667085',formatter:v=>(v/1e4).toFixed(0)+'万'},nameTextStyle:{color:'#667085'},splitLine:GRID_S,axisLine:{show:false}},
+             {type:'value',name:'转化率(%)',position:'right',max:v=>Math.ceil(v.max*1.3),axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:{show:false},axisLine:{show:false}}],
+      series:[
+        {name:'实际GMV',type:'bar',data:qs.map(q=>+byQi[q].gmv.toFixed(0)),barMaxWidth:34,itemStyle:{color,borderRadius:[6,6,0,0]}},
+        {name:'实际转化率',type:'line',yAxisIndex:1,smooth:true,symbolSize:7,lineStyle:{width:2.5,color:'#7c5cff'},itemStyle:{color:'#7c5cff'},
+         data:qs.map(cvrOf),endLabel:{show:true,formatter:'{c}%',color:'#7c5cff',fontSize:11,fontWeight:700}}
+      ]},{notMerge:true});
+  });
+}
+document.getElementById('regionSearch').addEventListener('input',e=>{ regionKw=e.target.value.trim(); renderRegion(); });
 
 /* ================= 过程数据 ================= */
 let curProc='aliu';
@@ -793,7 +907,7 @@ document.getElementById('procSearch').addEventListener('input',renderProc);
 /* ================= 总渲染 ================= */
 function renderAll(){
   refreshTip();
-  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); procChart(); renderProc();
+  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); renderRegion(); procChart(); renderProc();
 }
 window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c&&c.resize()));
 if(window.echarts){
