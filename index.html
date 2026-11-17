@@ -285,10 +285,21 @@
   </div>
 </div>
 
-<script src="data.js?v=4"></script>
+<script src="data.js?v=5"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
+/* 小组名归一化：源表里同一个组存在多种写法（如「天选A」与「深圳天选A」），统一成规范名 */
+const GROUP_ALIASES={'天选A':'深圳天选A'};
+function normGroup(g){ g=(g==null?'':String(g)).trim(); return GROUP_ALIASES[g]||g; }
+function normalizeGroups(node){
+  if(Array.isArray(node)){ node.forEach(normalizeGroups); }
+  else if(node&&typeof node==='object'){
+    if(typeof node['小组']==='string' && node['小组']!=='合计') node['小组']=normGroup(node['小组']);
+    Object.keys(node).forEach(k=>{ const v=node[k]; if(v&&typeof v==='object') normalizeGroups(v); });
+  }
+}
+if(D) normalizeGroups(D);
 const charts = {};
 function num(s){ if(s==null) return 0; s=String(s).trim().replace(/[¥,\s]/g,''); if(s===''||s==='-') return 0;
   if(s.endsWith('%')){ const v=parseFloat(s.slice(0,-1)); return isNaN(v)?0:v; }
@@ -1014,6 +1025,7 @@ if(window.echarts){
     s.onload=()=>{
       if(window.DASH && window.DASH.updated_at!==prev){
         D=window.DASH;
+        normalizeGroups(D);
         document.getElementById('updated').textContent=D.updated_at;
         document.getElementById('updated2').textContent=D.updated_at;
         refreshOptions(true); renderAll();
