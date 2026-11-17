@@ -158,6 +158,13 @@
   .rank-ctl select:hover{border-color:#b9c5ff;color:var(--primary)}
   .rank-ctl select:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(79,110,242,.12)}
   .rank-tip{color:#c47d09;font-size:12px;background:#fff8ec;border:1px solid #ffe4b8;border-radius:9px;padding:6px 12px;margin-bottom:11px}
+  /* ---------- 渠道转化 ---------- */
+  .chan-sel{padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
+    font-size:13px;outline:none;cursor:pointer;font-weight:500;transition:all .18s ease}
+  .chan-sel:hover{border-color:#b9c5ff;color:var(--primary)}
+  .chan-sel:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(79,110,242,.12)}
+  .chan-trend-card{padding:16px 18px}
+  #chanFilterChips .chip{padding:4px 13px;font-size:12px}
   /* ---------- 阿留分区 ---------- */
   .reg-block{margin-bottom:30px}
   .reg-head{display:flex;align-items:center;gap:12px;margin:6px 0 14px;flex-wrap:wrap}
@@ -298,7 +305,24 @@
     <div class="kpi-grid" id="chanKpi"></div>
     <div class="sec-title">各渠道线索 / 订单对比与转化率</div>
     <div class="card"><div class="chart" id="chartChannel" style="height:360px"></div></div>
-    <div class="sec-title">渠道转化明细（按期次）</div>
+
+    <div class="sec-title">各渠道分期次趋势（勾选渠道 / 切换指标筛选）</div>
+    <div class="card chan-trend-card">
+      <div class="toolbar" style="margin-bottom:6px">
+        <span style="color:var(--sub);font-size:12.5px;font-weight:600">指标</span>
+        <select id="chanTrendMetric" class="chan-sel">
+          <option value="cvr">订单转化率</option>
+          <option value="leads">线索量</option>
+          <option value="orders">订单量</option>
+          <option value="refund">退款率</option>
+        </select>
+        <span class="slicer-tip" id="chanTrendTip"></span>
+      </div>
+      <div class="chips" id="chanFilterChips" style="margin-bottom:8px"></div>
+      <div class="chart" id="chartChanTrend" style="height:340px"></div>
+    </div>
+
+    <div class="sec-title">渠道转化明细（期次降序 · 同期按线索量降序）</div>
     <div class="toolbar"><input class="search" id="chanSearch" placeholder="搜索渠道…"></div>
     <div class="tbl-scroll"><table id="chanTable"></table></div>
   </div>
@@ -322,7 +346,7 @@
   </div>
 </div>
 
-<script src="data.js?v=8"></script>
+<script src="data.js?v=9"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -1134,18 +1158,33 @@ document.getElementById('procSearch').addEventListener('input',renderProc);
 
 /* ================= 渠道转化 ================= */
 let curChan='aliu';                 /* 当前渠道业务线：aliu(按平台) / dianbo(按老师) */
-const chanSort={field:'',dir:'desc'};
+const chanSort={field:'期次',dir:'desc'};   /* 默认按期次降序：最新期次在前 */
+const chanTrendSel={metric:'cvr',channels:new Set()};  /* 趋势图筛选：指标 + 选中渠道 */
+function qiNum(s){ const m=/(\d{3,4})/.exec(String(s||'')); return m?+m[1]:0; }  /* "1105期" -> 1105 */
 function setChanTab(name){
   curChan=name;
   document.querySelectorAll('#chanSubtabs .subtab').forEach(b=>b.classList.toggle('active',b.dataset.chan===name));
+  chanTrendSel.channels=new Set();   /* 切换业务线时重置渠道勾选 */
 }
 /* 渠道明细行：受期次筛选影响（渠道表无「小组」维度，归属由子页签决定） */
 function activeChannelRows(){
   const src=(D.channel&&D.channel[curChan]&&D.channel[curChan].rows)||[];
   return src.filter(r=>state.qis.has(r['期次']));
 }
+/* 当前渠道下的所有渠道名（不受期次筛选，用于趋势图筛选控件） */
+function allChannelNames(){
+  const src=(D.channel&&D.channel[curChan]&&D.channel[curChan].rows)||[];
+  return [...new Set(src.map(r=>r['渠道']).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+}
 function renderChannel(){
   const rows=activeChannelRows();
+  /* 首次/业务线切换后填充渠道筛选 chips（集合变化才重建，避免闪烁） */
+  const chipBox=document.getElementById('chanFilterChips');
+  const curNames=[...chipBox.querySelectorAll('.chip')].map(c=>c.dataset.ch);
+  const wantNames=allChannelNames();
+  if(curNames.length!==wantNames.length || curNames.some(n=>!wantNames.includes(n))){
+    buildChanFilterChips();
+  }
   /* KPI：汇总当前渠道当前期次 */
   let leads=0,orders=0,refund=0;
   rows.forEach(r=>{ leads+=num(r['线索量']); orders+=num(r['订单量']); refund+=num(r['退款']); });
@@ -1195,6 +1234,7 @@ function renderChannel(){
   const kw=(document.getElementById('chanSearch').value||'').trim();
   let list=decorated.filter(r=>!kw||(r['渠道']||'').includes(kw));
   list=applySort(list,chanSort,(r,f)=>{
+    if(f==='期次') return qiNum(r['期次']);                 /* 期次按数值排序，非字符串 */
     if(f==='订单转化率') return r._cvr;
     if(f==='退款率') return r._rr;
     if(f==='线索量') return r._lead;
@@ -1202,16 +1242,88 @@ function renderChannel(){
     if(f==='退款') return r._refund;
     return r[f];
   });
+  /* 二级排序：同一期次内按线索量降序（applySort 为稳定排序，先排此层级） */
+  if(chanSort.field==='期次'){
+    const dir=chanSort.dir==='desc'?1:-1;
+    list.sort((a,b)=>{ const q=(qiNum(a['期次'])-qiNum(b['期次']))*dir; return q||(b._lead-a._lead); });
+  }
   const cols=['期次','渠道','线索量','订单量','退款','订单转化率','退款率'];
+  /* 期次列 rowspan 合并：相同期次只显示一次，避免「堆在一起」 */
+  const rowspan={}; list.forEach(r=>{ rowspan[r['期次']]=(rowspan[r['期次']]||0)+1; });
+  const seen={};
   document.getElementById('chanTable').innerHTML=list.length?
     `<thead><tr>${cols.map(h=>sortTh(h,h,chanSort,'cs')).join('')}</tr></thead><tbody>`+
-    list.map(r=>
-      `<tr><td style="text-align:left">${r['期次']}</td><td style="text-align:left;font-weight:600">${r['渠道']}</td>`+
-      `<td>${r._lead?r._lead.toLocaleString('zh-CN'):'—'}</td><td>${r._order?r._order.toLocaleString('zh-CN'):'—'}</td><td>${r._refund?r._refund.toLocaleString('zh-CN'):'—'}</td>`+
-      `<td>${r._lead?r._cvr.toFixed(2)+'%':'—'}</td><td>${r._order?r._rr.toFixed(2)+'%':'—'}</td></tr>`
-    ).join('')+'</tbody>'
+    list.map(r=>{
+      const showQi=!seen[r['期次']]; seen[r['期次']]=1;
+      const qiTd=showQi?`<td rowspan="${rowspan[r['期次']]}" style="text-align:center;vertical-align:middle;font-weight:700;color:var(--primary);background:#f6f8ff">${r['期次']}</td>`:'';
+      return `<tr>${qiTd}<td style="text-align:left;font-weight:600">${r['渠道']}</td>`+
+        `<td>${r._lead?r._lead.toLocaleString('zh-CN'):'—'}</td><td>${r._order?r._order.toLocaleString('zh-CN'):'—'}</td><td>${r._refund?r._refund.toLocaleString('zh-CN'):'—'}</td>`+
+        `<td>${r._lead?r._cvr.toFixed(2)+'%':'—'}</td><td>${r._order?r._rr.toFixed(2)+'%':'—'}</td></tr>`;
+    }).join('')+'</tbody>'
     :'<tbody><tr><td colspan="7" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
+
+  renderChanTrend(rows);
 }
+
+/* ---------- 渠道分期次趋势图（可筛选渠道 + 指标） ---------- */
+function buildChanFilterChips(){
+  const names=allChannelNames();
+  const sel=chanTrendSel.channels;
+  /* 首次进入默认全选；业务线切换已清空，也走全选 */
+  if(!sel.size){ names.forEach(n=>sel.add(n)); }
+  document.getElementById('chanFilterChips').innerHTML=names.map(n=>
+    `<span class="chip ${sel.has(n)?'active':''}" data-ch="${n}">${n}</span>`).join('');
+}
+function renderChanTrend(rows){
+  const sel=chanTrendSel.channels;
+  const names=allChannelNames().filter(n=>sel.has(n));
+  document.getElementById('chanTrendTip').textContent=`已选 ${names.length}/${allChannelNames().length} 个渠道 · X 轴按期次由早到晚`;
+
+  /* 期次升序，按数值 */
+  const qis=[...new Set(rows.map(r=>r['期次']))].sort((a,b)=>qiNum(a)-qiNum(b));
+  const metric=chanTrendSel.metric;
+  const metricName={cvr:'订单转化率',leads:'线索量',orders:'订单量',refund:'退款率'}[metric];
+  const isRate=(metric==='cvr'||metric==='refund');
+
+  /* 每个渠道一条折线：按期次聚合（同一期多行理论上不存在，仍做累加兜底） */
+  const series=names.map(name=>({
+    name, type:'line', smooth:true, symbol:'circle', symbolSize:6, connectNulls:true,
+    emphasis:{focus:'series'}, lineStyle:{width:2.5},
+    data:qis.map(q=>{
+      let lead=0,order=0,rf=0;
+      rows.filter(r=>r['渠道']===name&&r['期次']===q).forEach(r=>{
+        lead+=num(r['线索量']); order+=num(r['订单量']); rf+=num(r['退款']);
+      });
+      const hit=rows.some(r=>r['渠道']===name&&r['期次']===q);
+      if(!hit) return null;
+      if(metric==='leads') return lead;
+      if(metric==='orders') return order;
+      if(metric==='cvr') return lead?+((order-rf)/lead*100).toFixed(2):0;
+      if(metric==='refund') return order?+(rf/order*100).toFixed(2):0;
+      return 0;
+    })
+  }));
+  const ct=charts.chanTrend=charts.chanTrend||echarts.init(document.getElementById('chartChanTrend'));
+  ct.setOption({
+    tooltip:{trigger:'axis',...TT},
+    legend:{data:names,top:2,textStyle:{color:'#667085'}},
+    grid:{left:56,right:28,top:44,bottom:40},
+    xAxis:{type:'category',data:qis,boundaryGap:false,axisLabel:{color:'#667085'},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
+    yAxis:{type:'value',axisLabel:{color:'#667085',formatter:isRate?'{value}%':'{value}'},splitLine:GRID_S,axisLine:{show:false}},
+    series
+  },true);
+}
+/* 趋势图筛选交互 */
+document.getElementById('chanFilterChips').addEventListener('click',e=>{
+  const c=e.target.closest('.chip'); if(!c||!c.dataset.ch)return;
+  const n=c.dataset.ch, sel=chanTrendSel.channels;
+  if(sel.has(n)){ if(sel.size>1){sel.delete(n);c.classList.remove('active');} }
+  else { sel.add(n); c.classList.add('active'); }
+  renderChannel();
+});
+document.getElementById('chanTrendMetric').addEventListener('change',e=>{
+  chanTrendSel.metric=e.target.value; renderChannel();
+});
 document.getElementById('chanSubtabs').addEventListener('click',e=>{
   const b=e.target.closest('.subtab'); if(!b||!b.dataset.chan)return;
   setChanTab(b.dataset.chan); renderChannel();
