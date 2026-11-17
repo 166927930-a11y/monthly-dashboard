@@ -306,7 +306,7 @@
     <div class="sec-title">各渠道线索 / 订单对比与转化率</div>
     <div class="card"><div class="chart" id="chartChannel" style="height:360px"></div></div>
 
-    <div class="sec-title">各渠道分期次趋势（勾选渠道 / 切换指标筛选）</div>
+    <div class="sec-title">各渠道分期次趋势（单选 / 多选 · 切换指标筛选）</div>
     <div class="card chan-trend-card">
       <div class="toolbar" style="margin-bottom:6px">
         <span style="color:var(--sub);font-size:12.5px;font-weight:600">指标</span>
@@ -316,6 +316,8 @@
           <option value="orders">订单量</option>
           <option value="refund">退款率</option>
         </select>
+        <span style="color:var(--sub);font-size:12.5px;font-weight:600;margin-left:6px">渠道</span>
+        <span class="chip-mini on" id="chanTrendMode" data-chan-bulk="mode" title="单选：一次只看一条线；多选：可勾选多条对比">单选</span>
         <span class="slicer-tip" id="chanTrendTip"></span>
       </div>
       <div class="chips" id="chanFilterChips" style="margin-bottom:8px"></div>
@@ -346,7 +348,7 @@
   </div>
 </div>
 
-<script src="data.js?v=10"></script>
+<script src="data.js?v=11"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -1159,7 +1161,7 @@ document.getElementById('procSearch').addEventListener('input',renderProc);
 /* ================= 渠道转化 ================= */
 let curChan='aliu';                 /* 当前渠道业务线：aliu(按平台) / dianbo(按老师) */
 const chanSort={field:'期次',dir:'desc'};   /* 默认按期次降序：最新期次在前 */
-const chanTrendSel={metric:'cvr',channels:new Set()};  /* 趋势图筛选：指标 + 选中渠道 */
+const chanTrendSel={metric:'cvr',mode:'single',channels:new Set()};  /* 趋势图筛选：指标 + 单选/多选 + 选中渠道 */
 function qiNum(s){ const m=/(\d{3,4})/.exec(String(s||'')); return m?+m[1]:0; }  /* "1105期" -> 1105 */
 function setChanTab(name){
   curChan=name;
@@ -1274,15 +1276,19 @@ function renderChannel(){
 function buildChanFilterChips(){
   const names=allChannelNames();
   const sel=chanTrendSel.channels;
-  /* 首次进入默认全选；业务线切换已清空，也走全选 */
-  if(!sel.size){ names.forEach(n=>sel.add(n)); }
+  /* 首次进入 / 业务线切换后已清空：单选只选第一个（画面清爽），多选则全选 */
+  if(!sel.size){
+    if(chanTrendSel.mode==='single'){ if(names.length) sel.add(names[0]); }
+    else { names.forEach(n=>sel.add(n)); }
+  }
   document.getElementById('chanFilterChips').innerHTML=names.map(n=>
     `<span class="chip ${sel.has(n)?'active':''}" data-ch="${n}">${n}</span>`).join('');
 }
 function renderChanTrend(rows){
   const sel=chanTrendSel.channels;
   const names=allChannelNames().filter(n=>sel.has(n));
-  document.getElementById('chanTrendTip').textContent=`已选 ${names.length}/${allChannelNames().length} 个渠道 · X 轴按期次由早到晚`;
+  document.getElementById('chanTrendTip').textContent=
+    `${chanTrendSel.mode==='single'?'单选':'多选'} · 已选 ${names.length}/${allChannelNames().length} 个渠道 · X 轴按期次由早到晚`;
 
   /* 期次升序，按数值 */
   const qis=[...new Set(rows.map(r=>r['期次']))].sort((a,b)=>qiNum(a)-qiNum(b));
@@ -1322,8 +1328,26 @@ function renderChanTrend(rows){
 document.getElementById('chanFilterChips').addEventListener('click',e=>{
   const c=e.target.closest('.chip'); if(!c||!c.dataset.ch)return;
   const n=c.dataset.ch, sel=chanTrendSel.channels;
-  if(sel.has(n)){ if(sel.size>1){sel.delete(n);c.classList.remove('active');} }
-  else { sel.add(n); c.classList.add('active'); }
+  if(chanTrendSel.mode==='single'){
+    /* 单选：点谁只留谁，始终一条线 */
+    chanTrendSel.channels=new Set([n]);
+    buildChanFilterChips();
+  } else {
+    if(sel.has(n)){ if(sel.size>1){sel.delete(n);c.classList.remove('active');} }
+    else { sel.add(n); c.classList.add('active'); }
+  }
+  renderChannel();
+});
+document.getElementById('chanTrendMode').addEventListener('click',()=>{
+  chanTrendSel.mode = chanTrendSel.mode==='multi' ? 'single' : 'multi';
+  /* 多选→单选：只保留当前选中集合的第一个，避免一堆线 */
+  if(chanTrendSel.mode==='single' && chanTrendSel.channels.size>1){
+    chanTrendSel.channels=new Set([[...chanTrendSel.channels][0]]);
+  }
+  const btn=document.getElementById('chanTrendMode');
+  btn.textContent = chanTrendSel.mode==='multi' ? '多选' : '单选';
+  btn.classList.toggle('on', chanTrendSel.mode==='single');
+  buildChanFilterChips();
   renderChannel();
 });
 document.getElementById('chanTrendMetric').addEventListener('change',e=>{
