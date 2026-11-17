@@ -346,7 +346,7 @@
   </div>
 </div>
 
-<script src="data.js?v=9"></script>
+<script src="data.js?v=10"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -1248,17 +1248,22 @@ function renderChannel(){
     list.sort((a,b)=>{ const q=(qiNum(a['期次'])-qiNum(b['期次']))*dir; return q||(b._lead-a._lead); });
   }
   const cols=['期次','渠道','线索量','订单量','退款','订单转化率','退款率'];
-  /* 期次列 rowspan 合并：相同期次只显示一次，避免「堆在一起」 */
-  const rowspan={}; list.forEach(r=>{ rowspan[r['期次']]=(rowspan[r['期次']]||0)+1; });
+  /* 期次列：每组首行显示期次+底色，组内其余行留空但「保留 td 占位」。
+     每行必须都是 7 个 td，否则 :nth-child 左对齐规则会按 DOM 错位作用到数值列。 */
   const seen={};
   document.getElementById('chanTable').innerHTML=list.length?
     `<thead><tr>${cols.map(h=>sortTh(h,h,chanSort,'cs')).join('')}</tr></thead><tbody>`+
     list.map(r=>{
       const showQi=!seen[r['期次']]; seen[r['期次']]=1;
-      const qiTd=showQi?`<td rowspan="${rowspan[r['期次']]}" style="text-align:center;vertical-align:middle;font-weight:700;color:var(--primary);background:#f6f8ff">${r['期次']}</td>`:'';
+      const qiTd=showQi
+        ? `<td style="text-align:center;font-weight:700;color:var(--primary);background:#f6f8ff">${r['期次']}</td>`
+        : `<td style="background:#f6f8ff"></td>`;
       return `<tr>${qiTd}<td style="text-align:left;font-weight:600">${r['渠道']}</td>`+
-        `<td>${r._lead?r._lead.toLocaleString('zh-CN'):'—'}</td><td>${r._order?r._order.toLocaleString('zh-CN'):'—'}</td><td>${r._refund?r._refund.toLocaleString('zh-CN'):'—'}</td>`+
-        `<td>${r._lead?r._cvr.toFixed(2)+'%':'—'}</td><td>${r._order?r._rr.toFixed(2)+'%':'—'}</td></tr>`;
+        `<td style="text-align:left">${r._lead?r._lead.toLocaleString('zh-CN'):'—'}</td>`+
+        `<td style="text-align:right">${r._order?r._order.toLocaleString('zh-CN'):'—'}</td>`+
+        `<td style="text-align:right">${r._refund?r._refund.toLocaleString('zh-CN'):'—'}</td>`+
+        `<td style="text-align:right">${r._lead?r._cvr.toFixed(2)+'%':'—'}</td>`+
+        `<td style="text-align:right">${r._order?r._rr.toFixed(2)+'%':'—'}</td></tr>`;
     }).join('')+'</tbody>'
     :'<tbody><tr><td colspan="7" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
 
