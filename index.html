@@ -169,6 +169,26 @@
   .reg-meta{color:var(--sub);font-size:12.5px}
   .reg-gmv{margin-left:auto;font-size:13px;color:var(--sub);font-weight:600}
   .reg-gmv b{color:var(--ink);font-size:19px;font-weight:800;letter-spacing:-.3px}
+  /* 武汉 vs 深圳 大数对比 */
+  .vs-card{padding:2px 4px 6px}
+  .vs-table{width:100%;border-collapse:collapse;font-size:13px}
+  .vs-table th{padding:9px 12px;text-align:right;font-weight:700;color:var(--sub);font-size:12px;
+    border-bottom:1px solid #eef1f7;white-space:nowrap}
+  .vs-table th:first-child{text-align:left}
+  .vs-table th.vs-wh{color:#4f6ef2}
+  .vs-table th.vs-sz{color:#2ea36c}
+  .vs-table td{padding:9px 12px;border-bottom:1px solid #f4f6fa;text-align:right;white-space:nowrap}
+  .vs-table td:first-child{text-align:left;color:var(--sub);font-weight:600}
+  .vs-table tr:last-child td{border-bottom:none}
+  .vs-num{font-size:16.5px;font-weight:800;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+  .vs-num.wh{color:#4f6ef2}
+  .vs-num.sz{color:#2ea36c}
+  .vs-diff{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+  .vs-diff.up{color:#e0483e}
+  .vs-diff.down{color:#1f9c62}
+  .vs-muted{color:#9aa3b5;font-size:12px}
+  .vs-bar{height:5px;border-radius:3px;background:#eef1f7;overflow:hidden;margin-top:5px;min-width:64px}
+  .vs-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#4bbd8a,#2ea36c)}
   .foot{color:#8a93a6;font-size:12px;text-align:center;margin-top:44px;line-height:1.9}
   .foot a{color:var(--primary);text-decoration:none}
   .foot a:hover{text-decoration:underline}
@@ -286,7 +306,7 @@
   </div>
 </div>
 
-<script src="data.js?v=6"></script>
+<script src="data.js?v=7"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -925,6 +945,50 @@ function regionTableHtml(gs){
     sorted.map(g=>`<tr><td><b>${g.name}</b></td><td>${g.qis.size}</td><td>${g.leads.toLocaleString('zh-CN')}</td><td>${g.orders.toLocaleString('zh-CN')}</td><td><b>¥${fmtW(g.realGmv)}</b></td><td>¥${fmtW(g.gmv)}</td><td>${g.cvr.toFixed(2)}%</td><td>${g.refRate.toFixed(2)}%</td><td class="${g.rate!=null&&g.rate>=100?'down':g.rate!=null?'up':''}">${g.rate==null?'—':g.rate.toFixed(1)+'%'}</td></tr>`).join('')+
     `</tbody></table></div>`;
 }
+/* 武汉 vs 深圳 横向大数对比：一行一个指标，两片区数字并排，右侧给差额与深圳占比 */
+function regionCompareHtml(byKey){
+  const W=byKey.wuhan, S=byKey.shenzhen;
+  if(!W||!S) return '';
+  const money=v=>'¥'+fmtW(v);
+  const int=v=>Math.round(v).toLocaleString('zh-CN');
+  const specs=[
+    {label:'实际 GMV',   kind:'money', w:W.s.实际GMV,       s:S.s.实际GMV},
+    {label:'成交 GMV',   kind:'money', w:W.s.成交GMV含退款, s:S.s.成交GMV含退款},
+    {label:'线索量',     kind:'int',   w:W.s.线索量,        s:S.s.线索量},
+    {label:'订单量',     kind:'int',   w:W.s.订单量,        s:S.s.订单量},
+    {label:'有效订单',   kind:'int',   w:W.s.订单量-W.s.退款订单量, s:S.s.订单量-S.s.退款订单量},
+    {label:'实际转化率', kind:'pct',   w:W.s.转化率,        s:S.s.转化率},
+    {label:'退款率',     kind:'pct',   w:W.s.退款率,        s:S.s.退款率},
+    {label:'GMV 完成率', kind:'pct',   w:W.s.完成率,        s:S.s.完成率},
+    {label:'小组数',     kind:'cnt',   w:W.gs.length,       s:S.gs.length},
+    {label:'期次数',     kind:'cnt',   w:new Set(W.rows.map(r=>r['期次'])).size, s:new Set(S.rows.map(r=>r['期次'])).size},
+  ];
+  const fmtV=(sp,v)=> sp.kind==='money'?money(v): sp.kind==='pct'?(v==null?'—':v.toFixed(2)+'%'): int(v);
+  const body=specs.map(sp=>{
+    const diff=sp.s-sp.w;
+    const diffTxt=sp.kind==='pct'
+      ? (diff>=0?'+':'−')+Math.abs(diff).toFixed(2)+' pp'
+      : (diff>=0?'+':'−')+(sp.kind==='money'?'¥':'')+ (sp.kind==='money'?fmtW(Math.abs(diff)):int(Math.abs(diff)));
+    const total=sp.w+sp.s, share=total>0?sp.s/total*100:0;
+    const right=sp.kind==='pct'
+      ? `<span class="vs-muted">${diff>0?'深圳高':diff<0?'武汉高':'持平'}</span>`
+      : sp.kind==='cnt'
+        ? `<span class="vs-muted">深圳 ${share.toFixed(0)}%</span>`
+        : `<div class="vs-bar"><i style="width:${share.toFixed(1)}%"></i></div><span class="vs-muted">深圳 ${share.toFixed(1)}%</span>`;
+    return `<tr><td>${sp.label}</td>`+
+      `<td><span class="vs-num wh">${fmtV(sp,sp.w)}</span></td>`+
+      `<td><span class="vs-num sz">${fmtV(sp,sp.s)}</span></td>`+
+      `<td><span class="vs-diff ${diff>0?'up':diff<0?'down':''}">${diffTxt}</span></td>`+
+      `<td>${right}</td></tr>`;
+  }).join('');
+  const ratio=S.s.实际GMV>0?(W.s.实际GMV/S.s.实际GMV):null;
+  const note=ratio?`武汉实际 GMV 是深圳的 <b>${ratio.toFixed(1)}</b> 倍 · 武汉 ${W.gs.length} 个小组 / 深圳 ${S.gs.length} 个小组`:'';
+  return `<div class="sec-title">武汉 vs 深圳 · 大数对比${note?`<span class="reg-meta" style="margin-left:10px;font-weight:500">${note}</span>`:''}</div>
+    <div class="card vs-card"><div class="tbl-scroll"><table class="vs-table">
+      <thead><tr><th>指标</th><th class="vs-wh">武汉片区</th><th class="vs-sz">深圳片区</th><th>深圳 − 武汉</th><th>深圳占比</th></tr></thead>
+      <tbody>${body}</tbody></table></div></div>`;
+}
+
 function renderRegion(){
   const aliuRows = D.aliu.groups||[];
   const box=document.getElementById('regionSections');
@@ -937,11 +1001,13 @@ function renderRegion(){
   const base=aliuRows.filter(r=>state.qis.has(r['期次'])&&state.groups.has(r['小组'])&&(!regionKw||(r['小组']||'').includes(regionKw)));
   document.getElementById('regionTip').textContent=
     `阿留按城市拆分（本页仅看阿留）· 期次 ${state.qis.size}/${allQis.length} · 小组 ${state.groups.size}/${allGroups.length}`;
-  const blocks=REGION_DEFS.map(def=>({def,rows:base.filter(r=>def.test(r['小组']))})).filter(b=>b.rows.length);
-  if(!blocks.length){ box.innerHTML='<div class="empty-tip">当前筛选条件下没有阿留数据</div>'; return; }
+  const details=REGION_DEFS.map(def=>({def,rows:base.filter(r=>def.test(r['小组']))}))
+    .filter(b=>b.rows.length)
+    .map(b=>({...b,s:aggRows(b.rows),gs:regionAggByGroup(b.rows)}));
+  if(!details.length){ box.innerHTML='<div class="empty-tip">当前筛选条件下没有阿留数据</div>'; return; }
+  const byKey={}; details.forEach(d=>{ byKey[d.def.key]=d; });
   const tag='<span class="who who-aliu">阿留</span>';
-  box.innerHTML=blocks.map(({def,rows})=>{
-    const s=aggRows(rows), gs=regionAggByGroup(rows);
+  box.innerHTML=regionCompareHtml(byKey)+details.map(({def,rows,s,gs})=>{
     const kpis=[
       kpiCard('实际 GMV',tag,fmtMoney(s.实际GMV),s.目标GMV>0?'目标 ¥'+fmtW(s.目标GMV):''),
       kpiCard('成交 GMV',tag,fmtMoney(s.成交GMV含退款),'含退款口径'),
@@ -963,7 +1029,7 @@ function renderRegion(){
       ${regionTableHtml(gs)}
     </div>`;
   }).join('');
-  blocks.forEach(({def,rows})=>{
+  details.forEach(({def,rows})=>{
     const el=document.getElementById('chartReg-'+def.key); if(!el)return;
     const byQi={};
     rows.forEach(r=>{
