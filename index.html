@@ -45,6 +45,7 @@
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,163,108,.45)}70%{box-shadow:0 0 0 7px rgba(46,163,108,0)}100%{box-shadow:0 0 0 0 rgba(46,163,108,0)}}
   .tabs{display:flex;gap:6px;margin-left:auto;background:rgba(246,247,251,.9);border:1px solid var(--line);border-radius:12px;padding:4px}
   .tab{padding:7px 18px;border-radius:9px;cursor:pointer;color:var(--sub);font-weight:600;border:none;background:none;font-size:13.5px;transition:all .22s ease}
+  .tab.disabled{opacity:.4;cursor:not-allowed}
   .tab:hover{color:var(--primary);background:rgba(79,110,242,.07)}
   .tab.active{background:linear-gradient(120deg,#4f6ef2,#6d5cf0);color:#fff;box-shadow:0 4px 12px rgba(79,110,242,.35)}
   .wrap{max-width:1320px;margin:0 auto;padding:18px 28px 64px}
@@ -285,7 +286,7 @@
   </div>
 </div>
 
-<script src="data.js?v=5"></script>
+<script src="data.js?v=6"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -357,6 +358,24 @@ function refreshOptions(keep){
   buildSlicer();
 }
 
+/* 当前业务线下的明细行（用于筛选选项，避免店播视角出现阿留/武汉的小组） */
+function scopeRows(){
+  if(state.who==='all') return [...(D.aliu.groups||[]), ...(D.dianbo.groups||[])];
+  return (D[state.who] && D[state.who].groups) || [];
+}
+/* 切换业务线后重建期次/小组选项：小组只列该业务线的组，期次保留原选择 */
+function rebuildSlicerOptions(){
+  const prevQ=new Set(state.qis);
+  const rows=scopeRows();
+  allQis=[...new Set(rows.map(r=>r['期次']).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  allGroups=[...new Set(rows.map(r=>normGroup(r['小组'])).filter(Boolean))].sort();
+  state.qis=new Set(allQis.filter(q=>prevQ.has(q)));
+  if(!state.qis.size) state.qis=new Set(allQis);
+  state.groups=new Set(allGroups);
+  oldQis=[...allQis]; oldGroups=[...allGroups];
+  buildSlicer();
+}
+
 function refreshTip(){
   const n = activeRows().length;
   document.getElementById('slicerTip').textContent =
@@ -368,6 +387,8 @@ document.getElementById('whoChips').addEventListener('click',e=>{
   document.querySelectorAll('#whoChips .chip').forEach(x=>x.classList.toggle('active',x===c));
   // 归属选定后，过程页签自动切换到对应业务线（排名页随归属自动只显示对应区块）
   if(state.who!=='all'){ setProcTab(state.who); }
+  // 小组选项跟随业务线：选店播时不再列出武汉等阿留小组
+  rebuildSlicerOptions();
   renderAll();
 });
 document.getElementById('qiChips').addEventListener('click',e=>{
@@ -466,14 +487,28 @@ function sortTh(label,key,cfg,prefix){
 function toggleSort(cfg,key){ if(cfg.field===key) cfg.dir=cfg.dir==='desc'?'asc':'desc'; else { cfg.field=key; cfg.dir='desc'; } }
 
 /* ================= 页签 ================= */
+let curPage='overview';
 function showPage(id){
+  curPage=id;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.toggle('active',t.dataset.page===id));
   Object.values(charts).forEach(c=>c&&c.resize());
 }
+/* 「阿留分区」页只对阿留有效：业务线选店播时置灰不可进 */
+function syncRegionTab(){
+  const tab=document.querySelector('#tabs .tab[data-page="region"]');
+  if(!tab) return;
+  const off = state.who==='dianbo';
+  tab.classList.toggle('disabled', off);
+  tab.title = off ? '阿留分区仅统计阿留，业务线切到店播时不可用' : '';
+  if(off && curPage==='region') showPage('overview');
+}
 document.getElementById('tabs').addEventListener('click',e=>{
-  if(e.target.dataset.page) showPage(e.target.dataset.page);
+  const tab=e.target.closest('.tab');
+  if(!tab || !tab.dataset.page) return;
+  if(tab.classList.contains('disabled')) return;
+  showPage(tab.dataset.page);
 });
 
 /* ================= KPI ================= */
@@ -891,11 +926,18 @@ function regionTableHtml(gs){
     `</tbody></table></div>`;
 }
 function renderRegion(){
-  const base=(D.aliu.groups||[]).filter(r=>state.qis.has(r['期次'])&&state.groups.has(r['小组'])&&(!regionKw||(r['小组']||'').includes(regionKw)));
+  const aliuRows = D.aliu.groups||[];
+  const box=document.getElementById('regionSections');
+  // 本页仅统计阿留：业务线选店播时不显示，避免把阿留的武汉 / 深圳片区当成店播数据
+  if(state.who==='dianbo'){
+    document.getElementById('regionTip').textContent='阿留分区仅统计阿留；当前业务线为「店播」，本页无数据。';
+    box.innerHTML='<div class="empty-tip">店播没有城市分区，本页仅展示阿留。请把业务线切回「阿留」或「全部」。</div>';
+    return;
+  }
+  const base=aliuRows.filter(r=>state.qis.has(r['期次'])&&state.groups.has(r['小组'])&&(!regionKw||(r['小组']||'').includes(regionKw)));
   document.getElementById('regionTip').textContent=
     `阿留按城市拆分（本页仅看阿留）· 期次 ${state.qis.size}/${allQis.length} · 小组 ${state.groups.size}/${allGroups.length}`;
   const blocks=REGION_DEFS.map(def=>({def,rows:base.filter(r=>def.test(r['小组']))})).filter(b=>b.rows.length);
-  const box=document.getElementById('regionSections');
   if(!blocks.length){ box.innerHTML='<div class="empty-tip">当前筛选条件下没有阿留数据</div>'; return; }
   const tag='<span class="who who-aliu">阿留</span>';
   box.innerHTML=blocks.map(({def,rows})=>{
@@ -1011,6 +1053,7 @@ document.getElementById('procSearch').addEventListener('input',renderProc);
 /* ================= 总渲染 ================= */
 function renderAll(){
   refreshTip();
+  syncRegionTab();
   renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); renderRegion(); procChart(); renderProc();
 }
 window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c&&c.resize()));
