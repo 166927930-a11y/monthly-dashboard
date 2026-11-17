@@ -206,6 +206,7 @@
       <button class="tab" data-page="groups">小组对比</button>
       <button class="tab" data-page="rank">员工排名</button>
       <button class="tab" data-page="region">阿留分区</button>
+      <button class="tab" data-page="channel">渠道转化</button>
       <button class="tab" data-page="process">过程数据</button>
     </div>
   </div>
@@ -287,6 +288,21 @@
     <div id="regionSections"></div>
   </div>
 
+  <!-- ============ 渠道转化 ============ -->
+  <div class="page" id="page-channel">
+    <div class="rank-tip">渠道口径：<b>阿留按平台</b>（抖店 / 小红书 / 百家号 / 视频号）、<b>店播按老师</b>（皮皮 / 许老师等）。订单转化率 = 订单 / 线索，退款率 = 退款 / 订单。数据来自飞书「渠道期次引用」表。</div>
+    <div class="subtabs" id="chanSubtabs">
+      <button class="subtab active" data-chan="aliu">阿留 · 按平台</button>
+      <button class="subtab" data-chan="dianbo">店播 · 按老师</button>
+    </div>
+    <div class="kpi-grid" id="chanKpi"></div>
+    <div class="sec-title">各渠道线索 / 订单对比与转化率</div>
+    <div class="card"><div class="chart" id="chartChannel" style="height:360px"></div></div>
+    <div class="sec-title">渠道转化明细（按期次）</div>
+    <div class="toolbar"><input class="search" id="chanSearch" placeholder="搜索渠道…"></div>
+    <div class="tbl-scroll"><table id="chanTable"></table></div>
+  </div>
+
   <!-- ============ 过程数据 ============ -->
   <div class="page" id="page-process">
     <div class="sec-title">过程指标均值对比</div>
@@ -306,7 +322,7 @@
   </div>
 </div>
 
-<script src="data.js?v=7"></script>
+<script src="data.js?v=8"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -405,8 +421,8 @@ document.getElementById('whoChips').addEventListener('click',e=>{
   const c=e.target.closest('.chip'); if(!c)return;
   state.who=c.dataset.who;
   document.querySelectorAll('#whoChips .chip').forEach(x=>x.classList.toggle('active',x===c));
-  // 归属选定后，过程页签自动切换到对应业务线（排名页随归属自动只显示对应区块）
-  if(state.who!=='all'){ setProcTab(state.who); }
+  // 归属选定后，过程/渠道页签自动切换到对应业务线（排名页随归属自动只显示对应区块）
+  if(state.who!=='all'){ setProcTab(state.who); setChanTab(state.who); }
   // 小组选项跟随业务线：选店播时不再列出武汉等阿留小组
   rebuildSlicerOptions();
   renderAll();
@@ -1116,11 +1132,101 @@ document.getElementById('procSubtabs').addEventListener('click',e=>{
 });
 document.getElementById('procSearch').addEventListener('input',renderProc);
 
+/* ================= 渠道转化 ================= */
+let curChan='aliu';                 /* 当前渠道业务线：aliu(按平台) / dianbo(按老师) */
+const chanSort={field:'',dir:'desc'};
+function setChanTab(name){
+  curChan=name;
+  document.querySelectorAll('#chanSubtabs .subtab').forEach(b=>b.classList.toggle('active',b.dataset.chan===name));
+}
+/* 渠道明细行：受期次筛选影响（渠道表无「小组」维度，归属由子页签决定） */
+function activeChannelRows(){
+  const src=(D.channel&&D.channel[curChan]&&D.channel[curChan].rows)||[];
+  return src.filter(r=>state.qis.has(r['期次']));
+}
+function renderChannel(){
+  const rows=activeChannelRows();
+  /* KPI：汇总当前渠道当前期次 */
+  let leads=0,orders=0,refund=0;
+  rows.forEach(r=>{ leads+=num(r['线索量']); orders+=num(r['订单量']); refund+=num(r['退款']); });
+  const cvr=leads?(orders-refund)/leads*100:0;
+  const rr=orders?refund/orders*100:0;
+  const label=curChan==='aliu'?'阿留平台':'店播老师';
+  document.getElementById('chanKpi').innerHTML=
+    kpiCard('线索量',`<span style="color:var(--sub);font-size:11px">${label}</span>`,leads.toLocaleString('zh-CN'),'当前筛选期次累计')+
+    kpiCard('订单量',`<span style="color:var(--sub);font-size:11px">${label}</span>`,orders.toLocaleString('zh-CN'),'当前筛选期次累计')+
+    kpiCard('订单转化率',`<span style="color:var(--sub);font-size:11px">${label}</span>`,cvr.toFixed(2)+'%','(订单−退款)/线索')+
+    kpiCard('退款率',`<span style="color:var(--sub);font-size:11px">${label}</span>`,rr.toFixed(2)+'%',`退款 ${refund.toLocaleString('zh-CN')}`);
+
+  /* 图表：各渠道线索 vs 订单（柱）+ 转化率（折线，右轴） */
+  const byCh={};
+  rows.forEach(r=>{
+    const ch=r['渠道']; if(!ch)return;
+    if(!byCh[ch]) byCh[ch]={leads:0,orders:0,refund:0};
+    byCh[ch].leads+=num(r['线索量']); byCh[ch].orders+=num(r['订单量']); byCh[ch].refund+=num(r['退款']);
+  });
+  const names=Object.keys(byCh);
+  const leadsArr=names.map(k=>byCh[k].leads);
+  const ordersArr=names.map(k=>byCh[k].orders);
+  const cvrArr=names.map(k=>{const o=byCh[k];return o.leads?(o.orders-o.refund)/o.leads*100:0;});
+  const cc=charts.channel=charts.channel||echarts.init(document.getElementById('chartChannel'));
+  cc.setOption({
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'},...TT},
+    legend:{data:['线索量','订单量','订单转化率'],top:4,textStyle:{color:'#667085'}},
+    grid:{left:56,right:56,top:48,bottom:40},
+    xAxis:{type:'category',data:names,axisLabel:{color:'#667085',interval:0},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
+    yAxis:[
+      {type:'value',name:'量',axisLabel:{color:'#667085'},splitLine:GRID_S,axisLine:{show:false}},
+      {type:'value',name:'转化率',axisLabel:{color:'#667085',formatter:'{value}%'},splitLine:{show:false},axisLine:{show:false}}
+    ],
+    series:[
+      {name:'线索量',type:'bar',data:leadsArr,itemStyle:{color:GRAD_BLUE,borderRadius:[4,4,0,0]},barMaxWidth:26},
+      {name:'订单量',type:'bar',data:ordersArr,itemStyle:{color:GRAD_ORANGE,borderRadius:[4,4,0,0]},barMaxWidth:26},
+      {name:'订单转化率',type:'line',yAxisIndex:1,data:cvrArr,smooth:true,symbolSize:7,lineStyle:{color:'#7c5cff',width:2.5},itemStyle:{color:'#7c5cff'}}
+    ]
+  },true);
+
+  /* 明细表：期次 × 渠道（先附加数值字段，再筛选/排序/渲染） */
+  const decorated=rows.map(r=>{
+    const l=num(r['线索量']),o=num(r['订单量']),rf=num(r['退款']);
+    return {...r,_lead:l,_order:o,_refund:rf,
+      _cvr:l?(o-rf)/l*100:0, _rr:o?rf/o*100:0};
+  });
+  const kw=(document.getElementById('chanSearch').value||'').trim();
+  let list=decorated.filter(r=>!kw||(r['渠道']||'').includes(kw));
+  list=applySort(list,chanSort,(r,f)=>{
+    if(f==='订单转化率') return r._cvr;
+    if(f==='退款率') return r._rr;
+    if(f==='线索量') return r._lead;
+    if(f==='订单量') return r._order;
+    if(f==='退款') return r._refund;
+    return r[f];
+  });
+  const cols=['期次','渠道','线索量','订单量','退款','订单转化率','退款率'];
+  document.getElementById('chanTable').innerHTML=list.length?
+    `<thead><tr>${cols.map(h=>sortTh(h,h,chanSort,'cs')).join('')}</tr></thead><tbody>`+
+    list.map(r=>
+      `<tr><td style="text-align:left">${r['期次']}</td><td style="text-align:left;font-weight:600">${r['渠道']}</td>`+
+      `<td>${r._lead?r._lead.toLocaleString('zh-CN'):'—'}</td><td>${r._order?r._order.toLocaleString('zh-CN'):'—'}</td><td>${r._refund?r._refund.toLocaleString('zh-CN'):'—'}</td>`+
+      `<td>${r._lead?r._cvr.toFixed(2)+'%':'—'}</td><td>${r._order?r._rr.toFixed(2)+'%':'—'}</td></tr>`
+    ).join('')+'</tbody>'
+    :'<tbody><tr><td colspan="7" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>';
+}
+document.getElementById('chanSubtabs').addEventListener('click',e=>{
+  const b=e.target.closest('.subtab'); if(!b||!b.dataset.chan)return;
+  setChanTab(b.dataset.chan); renderChannel();
+});
+document.getElementById('chanSearch').addEventListener('input',renderChannel);
+document.getElementById('chanTable').addEventListener('click',e=>{
+  const th=e.target.closest('th[data-cs]'); if(!th)return;
+  toggleSort(chanSort,th.dataset.cs); renderChannel();
+});
+
 /* ================= 总渲染 ================= */
 function renderAll(){
   refreshTip();
   syncRegionTab();
-  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); renderRegion(); procChart(); renderProc();
+  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); renderRegion(); renderChannel(); procChart(); renderProc();
 }
 window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c&&c.resize()));
 if(window.echarts){
