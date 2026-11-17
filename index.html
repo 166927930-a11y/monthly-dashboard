@@ -240,7 +240,7 @@
       </div>
       <input class="search" id="rankSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
     </div>
-    <div class="rank-tip" id="rankQiTip">口径说明：员工排名为<b>月度累计</b>数据（源表所有工作表均无按期次的员工明细），期次筛选不会改变本页排名；排名会随归属 / 小组 / 搜索筛选动态重算。如需按期次查看员工排名，需在飞书表中增加「分期次员工数据」区块。</div>
+    <div class="rank-tip" id="rankQiTip"><b>两种口径</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表，每期名次按成交GMV动态重算，可点击表头或用排序控件换指标）。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
     <div id="rankSections"></div>
   </div>
 
@@ -263,7 +263,7 @@
   </div>
 </div>
 
-<script src="data.js?v=3"></script>
+<script src="data.js?v=4"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -660,14 +660,18 @@ const RANK_COLS=['排名','姓名','小组','成交GMV(含退款)','线索量','
 const WHO_NAME={aliu:'阿留',dianbo:'店播'};
 /* 可排序的数值列 + 排序状态（名次始终按主指标「成交GMV(含退款)」在当前筛选内降序重算） */
 const RANK_SORTABLE=['成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
+/* 期次明细模式（数据来自转化小组引用表）：列与可排序字段略有不同 */
+const PERIOD_RANK_COLS=['排名','姓名','小组','成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','追单率'];
+const PERIOD_SORTABLE=['成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','追单率'];
 const RANK_PRIMARY='成交GMV(含退款)';
 let rankSort={field:RANK_PRIMARY,dir:'desc'};
-function rankTableHtml(cols,rows){
+function rankTableHtml(cols,rows,sortable){
+  sortable=sortable||RANK_SORTABLE;
   if(!rows.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
   const arrow=f=>rankSort.field===f?`<span class="arrow">${rankSort.dir==='desc'?'↓':'↑'}</span>`:'';
   return '<div class="tbl-scroll"><table>'+
     `<thead><tr>${cols.map(h=>{
-      const s=RANK_SORTABLE.includes(h);
+      const s=sortable.includes(h);
       return `<th${s?` class="sortable" data-sort="${h}"`:''}>${h}${s?arrow(h):''}</th>`;
     }).join('')}</tr></thead><tbody>`+
     rows.map(r=>{
@@ -682,23 +686,43 @@ function rankTableHtml(cols,rows){
 }
 function renderRank(){
   const kw=document.getElementById('rankSearch').value.trim();
+  const qsel=[...state.qis].sort((a,b)=>parseInt(a)-parseInt(b));
+  const qiActive=qsel.length!==allQis.length;
   const filt=d=>(d&&d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)));
   let html='',shown=0,total=0;
   (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
-    const d=D.rank[w]||{rows:[]};
-    const rows=filt(d).map(r=>({...r}));
-    shown+=rows.length; total+=d.rows.length;
-    // 动态名次：按主指标在「当前筛选结果」内降序重新计算 1..N（不再沿用飞书表的静态名次）
-    [...rows].sort((a,b)=>num(b[RANK_PRIMARY])-num(a[RANK_PRIMARY])).forEach((r,i)=>{r._rank=i+1;});
-    // 显示顺序按排序控件（下拉或点击表头均可调整）
-    rows.sort((a,b)=>{
-      const va=num(a[rankSort.field]),vb=num(b[rankSort.field]);
-      return rankSort.dir==='desc'?vb-va:va-vb;
-    });
-    html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次随筛选动态重算）</div>`+rankTableHtml(RANK_COLS,rows);
+    if(qiActive&&D.rankByQi&&D.rankByQi[w]){
+      /* ---- 期次明细模式：显示所选期次内每个员工的当期数据与动态名次 ---- */
+      const src=D.rankByQi[w].rows;
+      total+=src.length;
+      qsel.forEach(qi=>{
+        const rows=src.filter(r=>r['期次']===qi&&state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
+        if(!rows.length) return;
+        shown+=rows.length;
+        [...rows].sort((a,b)=>num(b[RANK_PRIMARY])-num(a[RANK_PRIMARY])).forEach((r,i)=>{r._rank=i+1;});
+        const sf=rows[0]&&rankSort.field in rows[0]?rankSort.field:RANK_PRIMARY;
+        rows.sort((a,b)=>{const va=num(a[sf]),vb=num(b[sf]);return rankSort.dir==='desc'?vb-va:va-vb;});
+        html+=`<div class="sec-title">${WHO_NAME[w]} · ${qi} 员工排名（${rows.length} 人）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
+      });
+    }else{
+      /* ---- 月度累计模式（不选期次时） ---- */
+      const d=D.rank[w]||{rows:[]};
+      const rows=filt(d).map(r=>({...r}));
+      shown+=rows.length; total+=d.rows.length;
+      // 动态名次：按主指标在「当前筛选结果」内降序重新计算 1..N（不再沿用飞书表的静态名次）
+      [...rows].sort((a,b)=>num(b[RANK_PRIMARY])-num(a[RANK_PRIMARY])).forEach((r,i)=>{r._rank=i+1;});
+      // 显示顺序按排序控件（下拉或点击表头均可调整）
+      rows.sort((a,b)=>{
+        const va=num(a[rankSort.field]),vb=num(b[rankSort.field]);
+        return rankSort.dir==='desc'?vb-va:va-vb;
+      });
+      html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次随筛选动态重算）</div>`+rankTableHtml(RANK_COLS,rows,RANK_SORTABLE);
+    }
   });
-  document.getElementById('rankSections').innerHTML=html;
-  document.getElementById('rankCount').textContent=`筛选后共 ${shown} 人（原始 ${total} 人）`;
+  document.getElementById('rankSections').innerHTML=html||'<div class="empty-tip" style="padding:24px;text-align:center;color:var(--sub)">没有匹配的期次明细数据</div>';
+  document.getElementById('rankCount').textContent=qiActive
+    ?`已选期次 ${qsel.join(' / ')} · 筛选后共 ${shown} 条（原始 ${total} 条）`
+    :`筛选后共 ${shown} 人（原始 ${total} 人）`;
 }
 const rankSortSel=document.getElementById('rankSortSel');
 rankSortSel.innerHTML=RANK_SORTABLE.map(f=>`<option value="${f}">${f}</option>`).join('');
