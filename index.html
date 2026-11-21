@@ -273,6 +273,25 @@
     border-radius:var(--r-sm);padding:7px 12px;margin-bottom:11px;font-weight:400}
   .rank-tip b{font-weight:600;color:#75520c}
 
+  /* ---------- 环比追踪 ---------- */
+  .mom-toolbar{flex-wrap:wrap;gap:10px 12px;margin-bottom:12px}
+  .mom-toolbar .subtabs{margin-bottom:0}
+  .mom-th{min-width:88px}
+  .mom-sort{cursor:pointer}
+  .mom-sort:hover{background:var(--primary-50);color:var(--primary)}
+  .mom-on{background:#dbe4f7 !important;color:#2f3f63 !important}
+  .mom-td{min-width:88px}
+  .mom-v{display:block;font-weight:600;color:var(--ink);font-size:12.5px;
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;letter-spacing:-.01em}
+  .mom-d{display:inline-block;margin-top:1px;padding:0 5px;border-radius:4px;line-height:1.55;
+    font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .mom-d.up{color:#b3261e;background:#fdebe9}
+  .mom-d.down{color:#0a7a54;background:#e6f5ee}
+  .mom-d.flat{color:#6b7a90;background:#e9eef6}
+  .mom-d.na{color:#a6b2c4;background:transparent;font-weight:400}
+  .mom-latest{background:#eef3fc}
+  .mom-span .mom-d{font-size:10.5px;padding:1px 7px}
+
   /* ---------- 渠道转化 ---------- */
   .chan-sel{padding:6px 12px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:#fff;
     color:var(--ink);font-size:12.5px;font-family:inherit;outline:none;cursor:pointer;font-weight:500;transition:all .16s ease}
@@ -397,6 +416,7 @@
       <button class="tab" data-page="rank" data-group="staff">员工排名</button>
       <button class="tab" data-page="region" data-group="manage">阿留分区</button>
       <button class="tab" data-page="groups" data-group="manage">小组对比</button>
+      <button class="tab" data-page="mom" data-group="manage">环比追踪</button>
       <button class="tab" data-page="process" data-group="process">过程数据</button>
       <button class="tab" data-page="channel" data-group="channel">渠道转化</button>
     </div>
@@ -482,6 +502,33 @@
     <div class="rank-tip" id="rankQiTip"><b>销管口径</b>：名次默认按<b>实际转化率</b>（有效订单 ÷ 线索）从高到低排列，并列时以实际GMV靠前者优先；也可切换排序指标或点表头重排，🥇🥈🥉 与第一名卡片都按实际转化率评选。<b>两种范围</b>：不选期次时显示<b>月度累计排名</b>；选择期次后显示<b>所选期次排名</b>，<b>多选期次时按所选期次的合计数据统一排名</b>，不再每期各排一次（数据源：转化小组引用表）。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
     <div class="champ-grid" id="rankChamps"></div>
     <div id="rankSections"></div>
+  </div>
+
+  <!-- ============ 环比追踪 ============ -->
+  <div class="page" id="page-mom">
+    <div class="rank-tip" id="momTip"><b>环比口径</b>：以每个期次为单位，对比上一期同一对象（员工 / 小组）的同指标变化。<b>金额与数量</b>显示变化百分比，<b>各类率</b>显示百分点（pp）差异；涨为红、跌为绿。<b>小组</b>由组内员工按人数加权汇总——率类按分子/分母重算，不是简单平均。期次窗口默认取<b>最近 4 期</b>，与上方期次筛选联动（若已筛选期次，则只在这些期次内对比）。</div>
+    <div class="toolbar mom-toolbar">
+      <div class="subtabs" id="momModeSubtabs">
+        <button class="subtab active" data-mom-mode="deal">成交环比</button>
+        <button class="subtab" data-mom-mode="proc">过程环比</button>
+      </div>
+      <div class="subtabs" id="momDimSubtabs">
+        <button class="subtab active" data-mom-dim="emp">员工</button>
+        <button class="subtab" data-mom-dim="group">小组</button>
+      </div>
+      <div class="rank-ctl">
+        <span>指标</span>
+        <select id="momMetric"></select>
+        <span>窗口</span>
+        <select id="momSpan">
+          <option value="3">最近 3 期</option>
+          <option value="4" selected>最近 4 期</option>
+          <option value="6">最近 6 期</option>
+        </select>
+      </div>
+      <input class="search" id="momSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
+    </div>
+    <div id="momSections"></div>
   </div>
 
   <!-- ============ 阿留分区 ============ -->
@@ -755,6 +802,7 @@ const PAGE_META={
   rank:{title:'员工排名',group:'staff',groupName:'员工'},
   region:{title:'阿留分区',group:'manage',groupName:'管理'},
   groups:{title:'小组对比',group:'manage',groupName:'管理'},
+  mom:{title:'环比追踪',group:'manage',groupName:'管理'},
   process:{title:'过程数据',group:'process',groupName:'过程'},
   channel:{title:'渠道转化',group:'channel',groupName:'渠道'}
 };
@@ -807,7 +855,22 @@ document.getElementById('navGroups').addEventListener('click',e=>{
 });
 /* 支持 #rank/#channel 等锚点直达对应页面 */
 window.addEventListener('load',()=>{
-  const h=(location.hash||'').replace('#','');
+  /* 支持 #mom?mode=proc&dim=group&span=6 直达指定环比视图 */
+  const raw=(location.hash||'');
+  const qs=raw.includes('?')?raw.split('?')[1]:'';
+  if(qs){
+    try{
+      const p=new URLSearchParams(qs);
+      if(MOM_METRICS[p.get('mode')]){ MOM.mode=p.get('mode'); MOM.metric=(MOM_METRICS[MOM.mode][0]||{}).k; fillMomMetrics(); }
+      if(p.get('m')&&MOM_METRICS[MOM.mode].some(x=>x.k===p.get('m'))){ MOM.metric=p.get('m'); fillMomMetrics(); }
+      if(p.get('dim')==='emp'||p.get('dim')==='group') MOM.dim=p.get('dim');
+      if([3,4,6].includes(parseInt(p.get('span'),10))){ MOM.span=parseInt(p.get('span'),10); const sp=document.getElementById('momSpan'); if(sp) sp.value=String(MOM.span); }
+      renderMom();
+      [...document.querySelectorAll('#momModeSubtabs .subtab')].forEach(x=>x.classList.toggle('active',x.dataset.momMode===MOM.mode));
+      [...document.querySelectorAll('#momDimSubtabs .subtab')].forEach(x=>x.classList.toggle('active',x.dataset.momDim===MOM.dim));
+    }catch(e){}
+  }
+  const h=raw.replace('#','').split('?')[0];
   showPage(PAGE_META[h]?h:curPage);
 });
 
@@ -1864,6 +1927,182 @@ exportMenu.addEventListener('click',e=>{
 });
 
 /* ================= 总渲染 ================= */
+/* ================= 环比追踪（员工 / 小组 · 成交 / 过程） ================= */
+const MOM={mode:'deal',dim:'emp',metric:'实际GMV',span:4,kw:'',sortIdx:-1};
+const MOM_METRICS={
+  deal:[
+    {k:'实际GMV',label:'实际GMV',kind:'money'},
+    {k:'成交GMV(含退款)',label:'成交GMV(含退款)',kind:'money'},
+    {k:'订单量',label:'订单量',kind:'int'},
+    {k:'线索量',label:'线索量',kind:'int'},
+    {k:'实际转化率',label:'实际转化率',kind:'pct'},
+    {k:'退款率',label:'退款率',kind:'pct'}
+  ],
+  proc:[
+    {k:'加微率',label:'加微率',kind:'pct'},
+    {k:'预约率',label:'预约率',kind:'pct'},
+    {k:'Day1到课率',label:'Day1到课率',kind:'pct'},
+    {k:'Day1完课率',label:'Day1完课率',kind:'pct'},
+    {k:'问卷率',label:'问卷率',kind:'pct'},
+    {k:'线索量',label:'线索量',kind:'int'},
+    {k:'总追单数',label:'追单数',kind:'int'}
+  ]
+};
+function momMetricDef(){
+  const list=MOM_METRICS[MOM.mode]||MOM_METRICS.deal;
+  return list.find(m=>m.k===MOM.metric)||list[0];
+}
+function fillMomMetrics(){
+  const sel=document.getElementById('momMetric');
+  if(!sel) return;
+  sel.innerHTML=(MOM_METRICS[MOM.mode]||[]).map(m=>`<option value="${m.k}"${m.k===MOM.metric?' selected':''}>${m.label}</option>`).join('');
+}
+/* 取期次窗口：默认全部期次里最近 N 期；若上方已筛选期次，则只在这些期次内对比 */
+function momPeriods(){
+  const all=[...new Set(['aliu','dianbo'].flatMap(w=>((D.rankByQi&&D.rankByQi[w]&&D.rankByQi[w].rows)||[]).map(r=>r['期次'])))].filter(Boolean)
+    .sort((a,b)=>parseInt(a)-parseInt(b));
+  const sel=(state.qis&&state.qis.size)?all.filter(q=>state.qis.has(q)):all;
+  const base=sel.length?sel:all;
+  return base.slice(-MOM.span);
+}
+/* 按对象×期次累加原始计数，率类统一用「分子/分母」重算，保证小组聚合不是简单平均 */
+function momAgg(w,periods){
+  const isProc=MOM.mode==='proc';
+  const src=isProc?((D.processByQi&&D.processByQi[w]&&D.processByQi[w].rows)||[])
+                  :((D.rankByQi&&D.rankByQi[w]&&D.rankByQi[w].rows)||[]);
+  const out={};
+  src.forEach(r=>{
+    const qi=r['期次'];
+    if(!periods.includes(qi)) return;
+    const g=normGroup(r['小组']||'');
+    if(state.groups.size&&!state.groups.has(g)) return;
+    const key=MOM.dim==='emp'?((r['姓名']||'')+'|'+g):g;
+    if(!out[key]) out[key]={name:MOM.dim==='emp'?(r['姓名']||''):g,group:g,per:{}};
+    const o=out[key];
+    const p=o.per[qi]||(o.per[qi]={L:0,O:0,R:0,GMV:0,CG:0,WX:0,BK:0,D1:0,D1C:0,Q:0,ZD:0});
+    if(isProc){
+      p.L+=num(r['线索量']); p.WX+=num(r['加微数']); p.BK+=num(r['预约数']);
+      p.D1+=num(r['Day1到课数']); p.D1C+=num(r['Day1完课数']);
+      p.Q+=num(r['问卷数']); p.ZD+=num(r['总追单数']);
+    }else{
+      p.L+=num(r['线索量']); p.O+=num(r['订单量']); p.R+=num(r['退款订单量']);
+      p.GMV+=num(r['实际GMV']); p.CG+=num(r['成交GMV(含退款)']);
+    }
+  });
+  return out;
+}
+function momValue(b,k){
+  if(!b) return null;
+  switch(k){
+    case '实际GMV': return b.GMV;
+    case '成交GMV(含退款)': return b.CG;
+    case '订单量': return b.O;
+    case '线索量': return b.L;
+    case '总追单数': return b.ZD;
+    case '实际转化率': return b.L?(b.O-b.R)/b.L*100:null;
+    case '退款率': return b.O?b.R/b.O*100:null;
+    case '加微率': return b.L?b.WX/b.L*100:null;
+    case '预约率': return b.L?b.BK/b.L*100:null;
+    case 'Day1到课率': return b.BK?b.D1/b.BK*100:null;
+    case 'Day1完课率': return b.D1?b.D1C/b.D1*100:null;
+    case '问卷率': return b.L?b.Q/b.L*100:null;
+  }
+  return null;
+}
+function momFmt(v,kind){
+  if(v==null||!isFinite(v)) return '—';
+  if(kind==='money') return fmtW(v);
+  if(kind==='pct') return v.toFixed(2)+'%';
+  return Math.round(v).toLocaleString('zh-CN');
+}
+/* 环比：金额/数量看百分比变化，率类看百分点(pp)差 */
+function momDelta(cur,prev,kind){
+  if(cur==null||prev==null||!isFinite(cur)||!isFinite(prev)) return {txt:'—',cls:'na'};
+  if(kind==='pct'){
+    const d=cur-prev;
+    if(Math.abs(d)<0.005) return {txt:'0.0pp',cls:'flat'};
+    return {txt:(d>0?'+':'')+d.toFixed(1)+'pp',cls:d>0?'up':'down'};
+  }
+  if(prev===0) return {txt:'—',cls:'na'};
+  const d=(cur-prev)/Math.abs(prev)*100;
+  if(Math.abs(d)<0.05) return {txt:'0.0%',cls:'flat'};
+  return {txt:(d>0?'+':'')+d.toFixed(1)+'%',cls:d>0?'up':'down'};
+}
+function renderMom(){
+  const box=document.getElementById('momSections');
+  if(!box) return;
+  const def=momMetricDef();
+  const periods=momPeriods();
+  if(!periods.length){ box.innerHTML='<div class="empty-tip">暂无期次数据</div>'; return; }
+  let html='';
+  (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
+    const agg=momAgg(w,periods);
+    let rows=Object.values(agg).map(o=>({name:o.name,group:o.group,vals:periods.map(q=>momValue(o.per[q],def.k))}));
+    if(MOM.kw) rows=rows.filter(r=>(r.name||'').includes(MOM.kw)||(r.group||'').includes(MOM.kw));
+    const title=`${WHO_NAME[w]} · ${MOM.dim==='emp'?'员工':'小组'}${MOM.mode==='deal'?'成交':'过程'}环比`;
+    if(!rows.length){
+      html+=`<div class="sec-title">${title}</div><div class="empty-tip">当前筛选条件下没有数据</div>`;
+      return;
+    }
+    const idx=(MOM.sortIdx>=0&&MOM.sortIdx<periods.length)?MOM.sortIdx:periods.length-1;
+    rows.sort((a,b)=>{
+      const va=a.vals[idx]==null?-Infinity:a.vals[idx], vb=b.vals[idx]==null?-Infinity:b.vals[idx];
+      return vb-va;
+    });
+    const head=periods.map((q,i)=>`<th class="mom-th mom-sort${i===idx?' mom-on':''}" data-mom-idx="${i}" title="点击按该期排序">${q}${i===idx?' ▾':''}</th>`).join('');
+    const body=rows.map((r,ri)=>{
+      const cells=periods.map((q,i)=>{
+        const v=r.vals[i];
+        /* 环比对象是「上一次有数据的期次」：中途缺席不产生空洞的 — */
+        let prev=null;
+        for(let j=i-1;j>=0;j--){ if(r.vals[j]!=null){ prev=r.vals[j]; break; } }
+        const d=momDelta(v,prev,def.kind);
+        return `<td class="mom-td${i===idx?' mom-latest':''}"><span class="mom-v">${momFmt(v,def.kind)}</span><span class="mom-d ${d.cls}">${d.txt}</span></td>`;
+      }).join('');
+      let fv=null,lv=null,n=0;
+      r.vals.forEach(v=>{ if(v!=null){ if(fv==null) fv=v; lv=v; n++; } });
+      const tot=n>=2?momDelta(lv,fv,def.kind):{txt:'—',cls:'na'};
+      const rk=ri<3?'r'+(ri+1):'';
+      return `<tr class="${rk}"><td>${ri+1}</td><td><b>${r.name||'—'}</b></td>`+
+        (MOM.dim==='emp'?`<td>${r.group||'—'}</td>`:'')+
+        cells+`<td class="mom-td mom-span"><span class="mom-d ${tot.cls}">${tot.txt}</span></td></tr>`;
+    }).join('');
+    html+=`<div class="sec-title">${title}（${periods[0]} → ${periods[periods.length-1]} · 按${def.label}）</div>
+      <div class="tbl-scroll"><table class="mom-table"><thead><tr>
+      <th>排名</th><th>${MOM.dim==='emp'?'姓名':'小组'}</th>${MOM.dim==='emp'?'<th>小组</th>':''}${head}<th>区间变化</th>
+      </tr></thead><tbody>${body}</tbody></table></div>`;
+  });
+  box.innerHTML=html;
+}
+/* 环比页交互 */
+function bindMom(){
+  const modeBox=document.getElementById('momModeSubtabs');
+  const dimBox=document.getElementById('momDimSubtabs');
+  if(!modeBox||!dimBox) return;
+  modeBox.addEventListener('click',e=>{
+    const b=e.target.closest('[data-mom-mode]'); if(!b) return;
+    MOM.mode=b.dataset.momMode; MOM.metric=(MOM_METRICS[MOM.mode]||[])[0].k; MOM.sortIdx=-1;
+    [...modeBox.children].forEach(x=>x.classList.toggle('active',x===b));
+    fillMomMetrics(); renderMom();
+  });
+  dimBox.addEventListener('click',e=>{
+    const b=e.target.closest('[data-mom-dim]'); if(!b) return;
+    MOM.dim=b.dataset.momDim; MOM.sortIdx=-1;
+    [...dimBox.children].forEach(x=>x.classList.toggle('active',x===b));
+    renderMom();
+  });
+  document.getElementById('momMetric').addEventListener('change',e=>{ MOM.metric=e.target.value; renderMom(); });
+  document.getElementById('momSpan').addEventListener('change',e=>{ MOM.span=parseInt(e.target.value,10)||4; renderMom(); });
+  document.getElementById('momSearch').addEventListener('input',e=>{ MOM.kw=e.target.value.trim(); renderMom(); });
+  document.getElementById('momSections').addEventListener('click',e=>{
+    const th=e.target.closest('th[data-mom-idx]'); if(!th) return;
+    const i=parseInt(th.dataset.momIdx,10);
+    MOM.sortIdx=(MOM.sortIdx===i)?-1:i;
+    renderMom();
+  });
+  fillMomMetrics();
+}
+
 /* 表格视觉编码：按表头语义给单元格打标，让关键指标有颜色层次，而不是整片同色黑字 */
 function decorateTables(){
   document.querySelectorAll('.tbl-scroll table').forEach(t=>{
@@ -1886,9 +2125,10 @@ function decorateTables(){
 function renderAll(){
   refreshTip();
   syncRegionTab();
-  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); renderRegion(); renderChannel(); procChart(); renderProc();
+  renderKpi(); renderGoals(); trendCharts(); renderQiTable(); groupCharts(); renderRank(); renderRegion(); renderChannel(); procChart(); renderProc(); renderMom();
   decorateTables();
 }
+bindMom();
 window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c&&c.resize()));
 if(window.echarts){
   refreshOptions(false);
