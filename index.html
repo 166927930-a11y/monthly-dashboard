@@ -7,287 +7,342 @@
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <script>window.echarts||document.write('<script src="https://unpkg.com/echarts@5.5.0/dist/echarts.min.js"><\/script>')</script>
 <style>
+  /* ============================================================
+     设计令牌：Slate 中性色 + Indigo 主色（Linear / Stripe 一类成熟 SaaS 配色）
+     文字层级按 11 / 12 / 13 / 14 / 15 / 17 / 24 / 36 的等比阶梯
+     字重只用 400 / 500 / 600 / 700，中文不使用 800 以上（会糊）
+     ============================================================ */
   :root{
-    --bg:#eaeef7; --card:#ffffff; --card-2:#f8fafe;
-    --ink:#1b2233; --sub:#5c6a85;
-    --line:#dfe5f1; --line-soft:#eaeef7;
-    --primary:#4a63e8; --primary-2:#7b5cf0;
-    --up:#e0474d; --down:#279a67;
-    --side-1:#2a3155; --side-2:#1b2137;
-    --shadow-sm:0 1px 2px rgba(27,34,51,.05),0 4px 14px rgba(27,34,51,.06);
-    --shadow-md:0 4px 10px rgba(27,34,51,.07),0 18px 40px rgba(27,34,51,.12);
-    --r:15px;
+    --bg:#f5f7fb;
+    --card:#ffffff;
+    --card-2:#fbfcfe;
+    --ink:#0f172a; --ink-2:#1e293b; --sub:#52627a; --muted:#8695ab;
+    --line:#e6eaf1; --line-soft:#eff2f7; --line-strong:#d7dee9;
+    --primary:#4f46e5; --primary-600:#4338ca; --primary-300:#a5b4fc;
+    --primary-50:#eef2ff; --primary-100:#e0e7ff; --primary-200:#c7d2fe;
+    --teal:#0d9488; --amber:#b45309; --danger:#dc2626;
+    --up:#c92a2a; --down:#0d8a5f;
+    --side-1:#0f172a; --side-2:#141e34;
+    --shadow-xs:0 1px 2px rgba(16,24,40,.04);
+    --shadow-sm:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.04);
+    --shadow-md:0 4px 10px -2px rgba(16,24,40,.07),0 14px 30px -8px rgba(16,24,40,.12);
+    --r-sm:8px; --r:12px; --r-lg:14px;
+    /* 字号阶梯 */
+    --fs-micro:11px; --fs-cap:12px; --fs-sm:13px; --fs-base:13.5px;
+    --fs-h3:14.5px; --fs-h2:17px; --fs-num:24px; --fs-hero:36px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
-    font-family:"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
-    color:var(--ink);font-size:14px;-webkit-font-smoothing:antialiased;
-    background:
-      radial-gradient(920px 460px at 94% -10%, rgba(124,92,255,.10), transparent 60%),
-      radial-gradient(780px 420px at -6% 0%, rgba(74,99,232,.11), transparent 58%),
-      linear-gradient(180deg,#edf1f9 0%,#e9edf6 55%,#eef1f8 100%);
+    font-family:"Inter","SF Pro Text","Segoe UI Variable Text","Segoe UI",
+      "PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",system-ui,sans-serif;
+    color:var(--ink);font-size:var(--fs-base);line-height:1.6;
+    letter-spacing:.005em;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    background:var(--bg);
+    background-image:radial-gradient(1100px 520px at 100% -8%, rgba(79,70,229,.055), transparent 62%);
     background-attachment:fixed;
   }
-  ::-webkit-scrollbar{width:8px;height:8px}
-  ::-webkit-scrollbar-thumb{background:#c9d1e2;border-radius:8px;border:2px solid transparent;background-clip:padding-box}
-  ::-webkit-scrollbar-thumb:hover{background:#b3bcd2;background-clip:padding-box}
+  ::selection{background:var(--primary-100);color:var(--primary-600)}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#cfd7e4;border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#b6c0d1;background-clip:padding-box}
   ::-webkit-scrollbar-track{background:transparent}
 
   /* ---------- 侧边栏 ---------- */
   .shell{display:flex;min-height:100vh}
-  .sidebar{position:fixed;left:0;top:0;bottom:0;width:238px;z-index:30;display:flex;flex-direction:column;
-    padding:22px 14px 16px;color:#e9edfb;overflow-y:auto;
-    background:linear-gradient(180deg,var(--side-1) 0%,#222949 48%,var(--side-2) 100%);
-    box-shadow:inset -1px 0 0 rgba(255,255,255,.06),10px 0 30px rgba(26,32,54,.10)}
-  .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18)}
-  .brand{display:flex;align-items:center;gap:9px;padding:2px 8px 0;font-size:16.5px;font-weight:800;letter-spacing:.2px;color:#fff}
-  .brand-mark{font-size:18px;filter:drop-shadow(0 3px 6px rgba(124,92,255,.5))}
-  .brand-sub{padding:8px 8px 2px;font-size:11.5px;color:rgba(233,237,251,.52);line-height:1.6}
-  .nav{display:flex;flex-direction:column;margin-top:8px}
-  .nav-group{margin-top:13px}
-  .nav-group-title{font-size:10.5px;font-weight:800;letter-spacing:2px;color:rgba(233,237,251,.40);padding:0 10px 6px}
-  .nav-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;margin-bottom:3px;
-    border:none;border-radius:10px;background:transparent;color:rgba(233,237,251,.80);
-    font-family:inherit;font-size:13.5px;font-weight:600;text-align:left;cursor:pointer;
-    transition:background .2s ease,color .2s ease,transform .2s ease}
-  .nav-item i{font-style:normal;font-size:13px;width:16px;text-align:center;opacity:.9}
-  .nav-item:hover{background:rgba(255,255,255,.09);color:#fff}
-  .nav-item.active{background:linear-gradient(100deg,#4a63e8,#7b5cf0);color:#fff;
-    box-shadow:0 8px 20px rgba(74,99,232,.38),inset 0 1px 0 rgba(255,255,255,.22)}
-  .nav-item.disabled{opacity:.35;cursor:not-allowed}
-  .side-foot{margin-top:auto;padding:14px 10px 2px;font-size:11px;line-height:1.75;
-    color:rgba(233,237,251,.38);border-top:1px solid rgba(255,255,255,.08)}
-  .main{flex:1;min-width:0;margin-left:238px}
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:232px;z-index:30;display:flex;flex-direction:column;
+    padding:20px 12px 14px;color:#e2e8f0;overflow-y:auto;
+    background:linear-gradient(180deg,var(--side-1) 0%,var(--side-2) 100%);
+    box-shadow:inset -1px 0 0 rgba(255,255,255,.06),8px 0 24px rgba(15,23,42,.06)}
+  .sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16)}
+  .brand{display:flex;align-items:center;gap:9px;padding:2px 8px 0;
+    font-size:15px;font-weight:600;letter-spacing:.01em;color:#fff}
+  .brand-mark{font-size:17px;line-height:1;filter:grayscale(.1)}
+  .brand-sub{padding:7px 8px 2px;font-size:11px;font-weight:400;letter-spacing:.02em;
+    color:rgba(148,163,184,.72);line-height:1.6}
+  .nav{display:flex;flex-direction:column;margin-top:14px}
+  .nav-group{margin-top:12px}
+  .nav-group-title{font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:rgba(148,163,184,.62);padding:0 10px 6px}
+  .nav-item{position:relative;display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;
+    margin-bottom:2px;border:none;border-radius:var(--r-sm);background:transparent;
+    color:rgba(226,232,240,.74);font-family:inherit;font-size:13px;font-weight:500;letter-spacing:.01em;
+    text-align:left;cursor:pointer;transition:background .18s ease,color .18s ease}
+  .nav-item i{font-style:normal;font-size:13px;width:16px;text-align:center;opacity:.85}
+  .nav-item:hover{background:rgba(148,163,184,.12);color:#fff}
+  .nav-item.active{background:linear-gradient(90deg,rgba(99,102,241,.30),rgba(99,102,241,.08));
+    color:#fff;font-weight:600;box-shadow:inset 0 0 0 1px rgba(129,140,248,.26)}
+  .nav-item.active::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+    width:3px;height:17px;border-radius:0 3px 3px 0;background:#818cf8}
+  .nav-item.active i{opacity:1}
+  .nav-item.disabled{opacity:.34;cursor:not-allowed}
+  .side-foot{margin-top:auto;padding:13px 10px 2px;font-size:10.5px;line-height:1.7;font-weight:400;
+    color:rgba(148,163,184,.55);border-top:1px solid rgba(255,255,255,.07)}
+  .main{flex:1;min-width:0;margin-left:232px}
 
   /* ---------- 顶栏 ---------- */
   .topbar{position:sticky;top:0;z-index:20;
-    background:rgba(242,245,251,.84);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
-    border-bottom:1px solid rgba(215,222,238,.9);box-shadow:0 6px 22px rgba(27,34,51,.05)}
-  .topbar-inner{max-width:1400px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-  .tb-left{display:flex;align-items:baseline;gap:10px}
-  .topbar h1{font-size:19px;font-weight:800;letter-spacing:.2px;color:#1b2233}
-  .tb-crumb{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--primary);
-    background:rgba(74,99,232,.10);border:1px solid rgba(74,99,232,.18);border-radius:999px;padding:3px 10px}
-  .tabs{display:flex;gap:6px;margin-left:auto;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:12px;padding:4px}
-  .tab{padding:7px 17px;border-radius:9px;cursor:pointer;color:var(--sub);font-weight:600;border:none;background:none;font-size:13.5px;font-family:inherit;transition:all .22s ease;white-space:nowrap}
+    background:rgba(255,255,255,.86);backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4);
+    border-bottom:1px solid var(--line)}
+  .topbar-inner{max-width:1400px;margin:0 auto;padding:12px 28px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .tb-left{display:flex;align-items:baseline;gap:9px}
+  .topbar h1{font-size:var(--fs-h2);font-weight:600;letter-spacing:-.005em;color:var(--ink);line-height:1.25}
+  .tb-crumb{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--primary);background:var(--primary-50);border:1px solid var(--primary-100);
+    border-radius:6px;padding:3px 8px}
+  .tabs{display:flex;gap:2px;margin-left:auto;background:var(--line-soft);border:1px solid var(--line);
+    border-radius:10px;padding:3px}
+  .tab{padding:6px 14px;border-radius:7px;cursor:pointer;color:var(--sub);font-weight:500;
+    border:none;background:none;font-size:12.5px;font-family:inherit;letter-spacing:.01em;
+    transition:background .18s ease,color .18s ease,box-shadow .18s ease;white-space:nowrap}
   .tab.hidden{display:none}
   .tab.disabled{opacity:.4;cursor:not-allowed}
-  .tab:hover{color:var(--primary);background:rgba(74,99,232,.08)}
-  .tab.active{background:linear-gradient(120deg,#4a63e8,#6d5cf0);color:#fff;box-shadow:0 4px 12px rgba(74,99,232,.34)}
-  .topbar .meta{color:var(--sub);font-size:12px;display:flex;align-items:center;
-    background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:999px;padding:5px 14px}
-  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--down);margin-right:6px;
-    box-shadow:0 0 0 0 rgba(39,154,103,.5);animation:pulse 2s infinite}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(39,154,103,.45)}70%{box-shadow:0 0 0 7px rgba(39,154,103,0)}100%{box-shadow:0 0 0 0 rgba(39,154,103,0)}}
+  .tab:hover{color:var(--ink);background:rgba(255,255,255,.75)}
+  .tab.active{background:var(--primary);color:#fff;font-weight:600;box-shadow:0 1px 2px rgba(79,70,229,.28)}
+  .topbar .meta{color:var(--sub);font-size:11.5px;font-weight:400;display:flex;align-items:center;
+    background:var(--c-50,#f8fafc);border:1px solid var(--line);border-radius:999px;padding:4px 12px}
+  .topbar .meta b{font-weight:600;color:var(--ink-2);font-variant-numeric:tabular-nums;margin:0 3px}
+  .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--down);margin-right:7px;
+    box-shadow:0 0 0 0 rgba(13,138,95,.45);animation:pulse 2.4s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(13,138,95,.42)}70%{box-shadow:0 0 0 6px rgba(13,138,95,0)}100%{box-shadow:0 0 0 0 rgba(13,138,95,0)}}
   .wrap{max-width:1400px;margin:0 auto;padding:20px 28px 64px}
   .page{display:none}
-  .page.active{display:block;animation:fadeUp .35s ease both}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .page.active{display:block;animation:fadeUp .3s ease both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 
-  /* ---------- 切片器 ---------- */
-  .slicer{background:linear-gradient(180deg,#fdfdff,#f6f8fe);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px;margin-bottom:18px;box-shadow:var(--shadow-sm)}
-  .slicer-row{display:flex;align-items:flex-start;gap:10px;padding:7px 0;flex-wrap:wrap}
-  .slicer-row+.slicer-row{border-top:1px dashed var(--line-soft)}
-  .slicer-label{flex:0 0 62px;color:var(--sub);font-size:13px;font-weight:600;line-height:28px}
-  .chips{display:flex;flex-wrap:wrap;gap:7px;flex:1}
-  .chip{padding:5px 15px;border-radius:999px;border:1px solid #d8e0ef;background:#f7f9fe;color:var(--sub);
-        font-size:12.5px;cursor:pointer;user-select:none;transition:all .18s ease;font-weight:500}
-  .chip:hover{border-color:#aebcf5;color:var(--primary);background:#eef2ff;transform:translateY(-1px)}
-  .chip.active{background:linear-gradient(120deg,#4a63e8,#6d5cf0);border-color:transparent;color:#fff;font-weight:600;
-        box-shadow:0 4px 12px rgba(74,99,232,.32)}
-  .chip.active.group-chip{background:#e8edff;border-color:#b9c6ff;color:#3d55da;box-shadow:none}
-  .chip-mini{flex:0 0 auto;padding:5px 12px;border-radius:999px;border:1px solid #d8e0ef;background:#f7f9fe;color:var(--sub);
-        font-size:12px;cursor:pointer;user-select:none;transition:all .18s ease;line-height:1;font-weight:500}
-  .chip-mini:hover{border-color:#aebcf5;color:var(--primary);background:#eef2ff}
-  .chip-mini.on{background:#e8edff;border-color:#b9c6ff;color:#3d55da;font-weight:700}
-  .slicer-foot{display:flex;align-items:center;gap:10px;margin-top:9px}
-  .slicer-tip{color:var(--sub);font-size:12px}
-  .btn-reset{margin-left:auto;padding:5px 16px;border-radius:9px;border:1px solid #d8e0ef;background:#f7f9fe;color:var(--sub);
-        font-size:12.5px;cursor:pointer;font-weight:500;transition:all .18s ease}
-  .btn-reset:hover{border-color:#aebcf5;color:var(--primary);background:#eef2ff;box-shadow:0 2px 8px rgba(74,99,232,.12)}
+  /* ---------- 筛选器 ---------- */
+  .slicer{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:14px 18px 12px;margin-bottom:18px;box-shadow:var(--shadow-xs)}
+  .slicer-row{display:flex;align-items:flex-start;gap:10px;padding:6px 0;flex-wrap:wrap}
+  .slicer-row+.slicer-row{border-top:1px solid var(--line-soft)}
+  .slicer-label{flex:0 0 46px;color:var(--muted);font-size:11.5px;font-weight:600;
+    letter-spacing:.04em;line-height:26px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;flex:1}
+  .chip{padding:4px 13px;border-radius:999px;border:1px solid var(--line-strong);background:#fff;color:var(--sub);
+    font-size:12px;cursor:pointer;user-select:none;transition:all .16s ease;font-weight:500;line-height:1.7}
+  .chip:hover{border-color:var(--primary-300);color:var(--primary);background:var(--primary-50)}
+  .chip.active{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:500;
+    box-shadow:0 1px 2px rgba(79,70,229,.24)}
+  .chip.active.group-chip{background:var(--primary-50);border-color:var(--primary-200);color:var(--primary-600);box-shadow:none}
+  .chip-mini{flex:0 0 auto;padding:4px 11px;border-radius:999px;border:1px solid var(--line-strong);
+    background:#fff;color:var(--sub);font-size:11.5px;cursor:pointer;user-select:none;
+    transition:all .16s ease;line-height:1.7;font-weight:500}
+  .chip-mini:hover{border-color:var(--primary-300);color:var(--primary);background:var(--primary-50)}
+  .chip-mini.on{background:var(--primary-50);border-color:var(--primary-200);color:var(--primary-600);font-weight:600}
+  .slicer-foot{display:flex;align-items:center;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-soft)}
+  .slicer-tip{color:var(--muted);font-size:11.5px;letter-spacing:.01em}
+  .btn-reset{margin-left:auto;padding:4px 14px;border-radius:var(--r-sm);border:1px solid var(--line-strong);
+    background:#fff;color:var(--sub);font-size:12px;cursor:pointer;font-weight:500;
+    font-family:inherit;transition:all .16s ease}
+  .btn-reset:hover{border-color:var(--primary-300);color:var(--primary);background:var(--primary-50)}
 
-  .sec-title{font-size:15.5px;font-weight:800;margin:26px 0 13px;display:flex;align-items:center;gap:9px;letter-spacing:.2px;color:#202a41}
-  .sec-title::before{content:"";width:5px;height:18px;border-radius:3px;background:linear-gradient(180deg,#4a63e8,#8a6bf2);box-shadow:0 2px 6px rgba(74,99,232,.28)}
+  /* ---------- 区块标题 ---------- */
+  .sec-title{font-size:var(--fs-h3);font-weight:600;margin:26px 0 12px;display:flex;align-items:center;
+    gap:8px;letter-spacing:0;color:var(--ink)}
+  .sec-title::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--primary)}
 
   /* ---------- KPI ---------- */
-  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-  .kpi-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:14px}
-  .kpi.hero{position:relative;overflow:hidden;padding:20px 24px;border:1px solid #d9e1f8;
-    background:linear-gradient(130deg,#e9eeff 0%,#f7f9ff 52%,#fff 100%)}
-  .kpi.hero::after{content:"";position:absolute;right:-46px;top:-46px;width:150px;height:150px;border-radius:50%;
-    background:radial-gradient(circle,rgba(124,92,255,.16),transparent 68%);pointer-events:none}
-  .kpi.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
-    background:linear-gradient(180deg,#4a63e8,#8a6bf2);border-radius:4px 0 0 4px}
-  .kpi.hero .label{font-size:13px}
-  .kpi.hero .value{font-size:38px;font-weight:800;letter-spacing:-.6px;margin-top:8px;
-    background:linear-gradient(105deg,#243188,#4a63e8 55%,#7b5cf0);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-  .hero-bar{height:6px;border-radius:999px;background:#dfe6fa;margin-top:14px;overflow:hidden;position:relative}
-  .hero-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#4a63e8,#8f7bff);
-    box-shadow:0 0 12px rgba(74,99,232,.45);transition:width .8s cubic-bezier(.22,.8,.36,1)}
-  .hero-bar i.warn{background:linear-gradient(90deg,#f59e0b,#ffc069);box-shadow:0 0 12px rgba(245,158,11,.4)}
-  .kpi{background:linear-gradient(180deg,#ffffff,#f8fafe);border:1px solid var(--line);border-radius:var(--r);padding:15px 18px;
-    box-shadow:var(--shadow-sm);transition:transform .2s ease,box-shadow .2s ease}
-  .kpi:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:#cfd9f1}
-  .kpi .label{color:var(--sub);font-size:12px;display:flex;justify-content:space-between;align-items:center;font-weight:600}
-  .kpi .label .who{font-size:11px;padding:2px 9px;border-radius:999px;font-weight:600}
-  .who-aliu{background:#e6ecff;color:#3d55da}
-  .who-dianbo{background:#fdf0d9;color:#a86a06}
-  .who-all{background:#e4f5ec;color:#1f8459}
-  .kpi .value{font-size:23px;font-weight:800;margin-top:7px;font-variant-numeric:tabular-nums;letter-spacing:-.3px;color:#16203a}
-  .kpi .g-sub{color:var(--sub);font-size:12px;margin-top:5px}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));gap:12px}
+  .kpi-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:12px}
+  .kpi.hero{position:relative;overflow:hidden;padding:20px 22px;border:1px solid var(--line);
+    background:linear-gradient(150deg,#f8f9ff 0%,#fff 58%)}
+  .kpi.hero::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--primary)}
+  .kpi.hero .label{font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--sub)}
+  .kpi.hero .value{font-size:var(--fs-hero);font-weight:700;letter-spacing:-.025em;line-height:1.1;
+    margin-top:8px;color:var(--ink);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+  .hero-bar{height:6px;border-radius:999px;background:#e9edf6;margin-top:14px;overflow:hidden}
+  .hero-bar i{display:block;height:100%;border-radius:999px;background:var(--primary);
+    transition:width .8s cubic-bezier(.22,.8,.36,1)}
+  .hero-bar i.warn{background:#d97706}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;
+    box-shadow:var(--shadow-xs);transition:border-color .18s ease,box-shadow .18s ease}
+  .kpi:hover{border-color:var(--line-strong);box-shadow:var(--shadow-sm)}
+  .kpi .label{color:var(--muted);font-size:11.5px;font-weight:600;letter-spacing:.03em;
+    display:flex;justify-content:space-between;align-items:center;line-height:1.5}
+  .kpi .label .who{font-size:10.5px;padding:1px 7px;border-radius:5px;font-weight:600;letter-spacing:.02em}
+  .who-aliu{background:var(--primary-50);color:var(--primary-600)}
+  .who-dianbo{background:#fdf6e7;color:#96650a}
+  .who-all{background:#e9f7f0;color:#0b7a55}
+  .kpi .value{font-size:var(--fs-num);font-weight:700;margin-top:6px;line-height:1.2;
+    color:var(--ink);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;letter-spacing:-.02em}
+  .kpi .g-sub{color:var(--muted);font-size:11.5px;margin-top:4px;font-weight:400}
   .up{color:var(--up)} .down{color:var(--down)}
 
-  /* ---------- 销冠卡片（员工排名页顶部） ---------- */
-  .champ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin:12px 0 2px}
-  .champ{position:relative;background:linear-gradient(135deg,#fffdf2,#fff6d9);border:1px solid #f0dda0;border-radius:var(--r);padding:16px 20px;
-    box-shadow:0 4px 14px rgba(214,158,20,.12);transition:transform .2s ease,box-shadow .2s ease;overflow:hidden}
-  .champ:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(214,158,20,.22)}
-  .champ::after{content:'🏆';position:absolute;right:14px;top:12px;font-size:32px;filter:drop-shadow(0 2px 4px rgba(214,158,20,.35))}
-  .champ .c-tag{font-size:11px;font-weight:700;color:#a16a00;letter-spacing:1px}
-  .champ .c-name{font-size:23px;font-weight:800;margin-top:5px;color:#7a5200;letter-spacing:-.3px}
-  .champ .c-group{display:inline-block;margin-left:10px;font-size:12px;font-weight:600;background:#fff;color:#a16a00;border:1px solid #eed9a0;border-radius:999px;padding:2px 11px;vertical-align:4px}
-  .champ .c-stats{display:flex;flex-wrap:wrap;gap:7px 20px;margin-top:11px;color:#8a6a1f;font-size:12px}
-  .champ .c-stats b{color:#5d4305;font-variant-numeric:tabular-nums;font-size:13.5px;margin-left:3px}
-  .champ .c-scope{margin-top:9px;color:#b98a1f;font-size:11px}
+  /* ---------- 第一名卡片 ---------- */
+  .champ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin:12px 0 2px}
+  .champ{position:relative;background:#fffdf6;border:1px solid #f0e4c6;border-radius:var(--r);
+    padding:15px 18px;box-shadow:var(--shadow-xs)}
+  .champ::after{content:'🏆';position:absolute;right:14px;top:11px;font-size:26px;opacity:.85}
+  .champ .c-tag{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#9a6b12}
+  .champ .c-name{font-size:20px;font-weight:700;margin-top:4px;color:#5f4306;letter-spacing:-.01em;line-height:1.3}
+  .champ .c-group{display:inline-block;margin-left:9px;font-size:11.5px;font-weight:500;background:#fff;
+    color:#9a6b12;border:1px solid #efe0bd;border-radius:6px;padding:1px 9px;vertical-align:3px;letter-spacing:.01em}
+  .champ .c-stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;color:#8a6b28;font-size:11.5px;font-weight:400}
+  .champ .c-stats b{color:#5b4108;font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:600;margin-left:3px}
+  .champ .c-scope{margin-top:8px;color:#a98a45;font-size:10.5px}
 
-  /* ---------- 卡片 / 图表 ---------- */
-  .card{background:linear-gradient(180deg,#ffffff,#fafbfe);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow-sm);transition:box-shadow .25s ease,border-color .25s ease}
-  .card:hover{box-shadow:var(--shadow-md);border-color:#cfd9f1}
+  /* ---------- 卡片 / 目标 ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;
+    box-shadow:var(--shadow-xs);transition:box-shadow .2s ease,border-color .2s ease}
+  .card:hover{box-shadow:var(--shadow-sm)}
   .chart{width:100%;height:340px}
-  .goal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}
-  .goal{background:linear-gradient(180deg,#ffffff,#f8fafe);border:1px solid var(--line);border-radius:var(--r);padding:17px 20px;box-shadow:var(--shadow-sm);transition:transform .2s ease,box-shadow .2s ease}
-  .goal:hover{transform:translateY(-2px);box-shadow:var(--shadow-md);border-color:#cfd9f1}
-  .goal .g-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
-  .goal .g-name{font-weight:700;font-size:14px;color:#202a41}
-  .goal .g-val{font-weight:800;font-size:19px;font-variant-numeric:tabular-nums;letter-spacing:-.3px}
-  .bar-track{height:9px;background:#e6ebf6;border-radius:999px;overflow:hidden;position:relative;box-shadow:inset 0 1px 2px rgba(27,34,51,.06)}
+  .goal-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:12px}
+  .goal{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;
+    box-shadow:var(--shadow-xs);transition:box-shadow .2s ease,border-color .2s ease}
+  .goal:hover{box-shadow:var(--shadow-sm);border-color:var(--line-strong)}
+  .goal .g-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px;gap:10px}
+  .goal .g-name{font-weight:600;font-size:13px;color:var(--ink-2);display:flex;align-items:center}
+  .goal .g-val{font-weight:700;font-size:18px;font-variant-numeric:tabular-nums;
+    font-feature-settings:"tnum" 1;letter-spacing:-.02em}
+  .bar-track{height:7px;background:#e9edf6;border-radius:999px;overflow:hidden;position:relative}
   .bar-fill{height:100%;border-radius:999px;transition:width .7s cubic-bezier(.22,.8,.36,1)}
-  .goal .g-sub{color:var(--sub);font-size:12px;margin-top:8px}
-  .subtabs{display:flex;gap:8px;margin-bottom:12px}
-  .subtab{padding:6px 16px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:500;border:1px solid #d8e0ef;background:#f7f9fe;color:var(--sub);transition:all .18s ease}
-  .subtab:hover{border-color:#aebcf5;color:var(--primary);background:#eef2ff}
-  .subtab.active{border-color:transparent;color:#fff;font-weight:600;background:linear-gradient(120deg,#4a63e8,#6d5cf0);box-shadow:0 4px 12px rgba(74,99,232,.30)}
+  .goal .g-sub{color:var(--muted);font-size:11.5px;margin-top:7px}
+  .subtabs{display:flex;gap:6px;margin-bottom:12px}
+  .subtab{padding:5px 14px;border-radius:var(--r-sm);cursor:pointer;font-size:12.5px;font-weight:500;
+    border:1px solid var(--line-strong);background:#fff;color:var(--sub);font-family:inherit;
+    transition:all .16s ease}
+  .subtab:hover{border-color:var(--primary-300);color:var(--primary);background:var(--primary-50)}
+  .subtab.active{border-color:var(--primary);color:#fff;font-weight:600;background:var(--primary);
+    box-shadow:0 1px 2px rgba(79,70,229,.24)}
   .subtab.hidden{display:none}
 
   /* ---------- 表格 ---------- */
   table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card)}
-  th,td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line-soft);white-space:nowrap;font-variant-numeric:tabular-nums;color:#26314a}
+  th,td{padding:9px 14px;text-align:right;border-bottom:1px solid var(--line-soft);
+    white-space:nowrap;color:var(--ink-2);font-size:var(--fs-sm);
+    font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
   th:first-child,td:first-child,th:nth-child(2),td:nth-child(2),th:nth-child(3),td:nth-child(3){text-align:left}
-  thead th{background:#e9eefa;color:#44506b;font-weight:700;font-size:12px;letter-spacing:.4px;position:sticky;top:0;z-index:2;
-    border-bottom:1px solid #d7dff0}
-  tbody tr{transition:background .15s ease}
-  tbody tr:nth-child(even){background:#fafbfe}
-  tbody tr:hover{background:#eef3ff}
+  thead th{background:#f8fafc;color:var(--sub);font-weight:600;font-size:11.5px;letter-spacing:.03em;
+    position:sticky;top:0;z-index:2;border-bottom:1px solid var(--line)}
+  tbody tr{transition:background .12s ease}
+  tbody tr:nth-child(even){background:#fbfcfe}
+  tbody tr:hover{background:#f4f6fb}
   tbody tr:last-child td{border-bottom:none}
-  .r1 td:first-child,.r2 td:first-child,.r3 td:first-child{font-weight:800}
-  .r1 td:first-child{color:#d4a017}.r2 td:first-child{color:#8c9bab}.r3 td:first-child{color:#b26a2f}
-  .r1 td:first-child::after{content:" 🥇";font-size:12px}
-  .r2 td:first-child::after{content:" 🥈";font-size:12px}
-  .r3 td:first-child::after{content:" 🥉";font-size:12px}
-  .tbl-scroll{max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--card);box-shadow:var(--shadow-sm)}
-  .tbl-scroll tr.total-row{background:#eef2fb;font-weight:800}
-  .tbl-scroll tr.total-row td{border-top:2px solid var(--line);color:var(--ink);position:sticky;bottom:0}
+  td b,td strong{font-weight:600;color:var(--ink)}
+  .r1 td:first-child,.r2 td:first-child,.r3 td:first-child{font-weight:600}
+  .r1 td:first-child{color:#b45309}.r2 td:first-child{color:#64748b}.r3 td:first-child{color:#9a5b32}
+  .r1 td:first-child::after{content:" 🥇";font-size:11px}
+  .r2 td:first-child::after{content:" 🥈";font-size:11px}
+  .r3 td:first-child::after{content:" 🥉";font-size:11px}
+  .tbl-scroll{max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:var(--r);
+    background:var(--card);box-shadow:var(--shadow-xs)}
+  .tbl-scroll tr.total-row{background:#f1f4fa;font-weight:600}
+  .tbl-scroll tr.total-row td{border-top:1px solid var(--line-strong);color:var(--ink);position:sticky;bottom:0;font-weight:600}
   .tbl-scroll thead th{position:sticky;top:0;z-index:2}
-  .search{padding:8px 14px;border:1px solid #d8e0ef;border-radius:10px;width:250px;outline:none;margin-left:auto;
-    background:#fbfcff;color:var(--ink);font-size:13px;transition:all .18s ease}
-  .search::placeholder{color:#98a2b8}
-  .search:focus{border-color:#9fb0ff;background:#fff;box-shadow:0 0 0 3px rgba(74,99,232,.12)}
+  .search{padding:7px 12px;border:1px solid var(--line-strong);border-radius:var(--r-sm);width:240px;
+    outline:none;margin-left:auto;background:#fff;color:var(--ink);font-size:12.5px;font-family:inherit;
+    transition:border-color .16s ease,box-shadow .16s ease}
+  .search::placeholder{color:var(--muted)}
+  .search:focus{border-color:var(--primary-300);box-shadow:0 0 0 3px rgba(79,70,229,.10)}
   .toolbar{display:flex;align-items:center;margin-bottom:11px;gap:10px}
   th.sortable{cursor:pointer;user-select:none}
-  th.sortable:hover{color:var(--primary);background:#f0f3ff}
-  th.sortable.on{color:var(--primary);background:#f0f3ff}
-  th.sortable .arrow{color:var(--primary);font-size:11px}
-  .rank-ctl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--sub);font-weight:600;margin-left:auto}
-  .rank-ctl select{padding:7px 10px;border:1px solid #d8e0ef;border-radius:10px;background:#fbfcff;color:var(--ink);
-    font-size:13px;outline:none;cursor:pointer;font-weight:500;transition:all .18s ease}
-  .rank-ctl select:hover{border-color:#aebcf5;color:var(--primary)}
-  .rank-ctl select:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(74,99,232,.12)}
-  .rank-tip{color:#9a6410;font-size:12px;background:#fff7e9;border:1px solid #f3dfb6;border-radius:9px;padding:6px 12px;margin-bottom:11px}
+  th.sortable:hover{color:var(--primary);background:var(--primary-50)}
+  th.sortable.on{color:var(--primary);background:var(--primary-50)}
+  th.sortable .arrow{color:var(--primary);font-size:10px;margin-left:3px}
+  .rank-ctl{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);font-weight:500;margin-left:auto}
+  .rank-ctl select{padding:6px 10px;border:1px solid var(--line-strong);border-radius:var(--r-sm);
+    background:#fff;color:var(--ink);font-size:12.5px;font-family:inherit;outline:none;cursor:pointer;
+    font-weight:500;transition:all .16s ease}
+  .rank-ctl select:hover{border-color:var(--primary-300)}
+  .rank-ctl select:focus{border-color:var(--primary-300);box-shadow:0 0 0 3px rgba(79,70,229,.10)}
+  .rank-tip{color:#8a6516;font-size:11.5px;line-height:1.75;background:#fffcf3;border:1px solid #f2e5c4;
+    border-radius:var(--r-sm);padding:7px 12px;margin-bottom:11px;font-weight:400}
+  .rank-tip b{font-weight:600;color:#75520c}
+
   /* ---------- 渠道转化 ---------- */
-  .chan-sel{padding:7px 12px;border:1px solid #d8e0ef;border-radius:10px;background:#fbfcff;color:var(--ink);
-    font-size:13px;outline:none;cursor:pointer;font-weight:500;transition:all .18s ease}
-  .chan-sel:hover{border-color:#aebcf5;color:var(--primary)}
-  .chan-sel:focus{border-color:#9fb0ff;box-shadow:0 0 0 3px rgba(74,99,232,.12)}
+  .chan-sel{padding:6px 12px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:#fff;
+    color:var(--ink);font-size:12.5px;font-family:inherit;outline:none;cursor:pointer;font-weight:500;transition:all .16s ease}
+  .chan-sel:hover{border-color:var(--primary-300)}
+  .chan-sel:focus{border-color:var(--primary-300);box-shadow:0 0 0 3px rgba(79,70,229,.10)}
   .chan-trend-card{padding:16px 18px}
-  #chanFilterChips .chip{padding:4px 13px;font-size:12px}
+  #chanFilterChips .chip{padding:3px 11px;font-size:11.5px}
+
   /* ---------- 阿留分区 ---------- */
   .reg-block{margin-bottom:30px}
   .reg-head{display:flex;align-items:center;gap:12px;margin:6px 0 14px;flex-wrap:wrap}
-  .reg-badge{font-size:15px;font-weight:800;color:#fff;padding:7px 18px;border-radius:11px;letter-spacing:.4px;
-    box-shadow:0 6px 16px rgba(23,28,38,.16)}
-  .reg-badge.wh{background:linear-gradient(120deg,#4f6ef2,#6d5cf0)}
-  .reg-badge.sz{background:linear-gradient(120deg,#2ea36c,#4bbd8a)}
-  .reg-badge.ot{background:linear-gradient(120deg,#f59e0b,#ffb347)}
-  .reg-meta{color:var(--sub);font-size:12.5px}
-  .reg-gmv{margin-left:auto;font-size:13px;color:var(--sub);font-weight:600}
-  .reg-gmv b{color:var(--ink);font-size:19px;font-weight:800;letter-spacing:-.3px}
-  /* 武汉 vs 深圳 大数对比 */
-  .vs-card{padding:2px 4px 6px}
-  .vs-table{width:100%;border-collapse:collapse;font-size:13px}
-  .vs-table th{padding:9px 12px;text-align:right;font-weight:700;color:var(--sub);font-size:12px;
-    border-bottom:1px solid #eef1f7;white-space:nowrap}
+  .reg-badge{font-size:12.5px;font-weight:600;color:#fff;padding:5px 14px;border-radius:var(--r-sm);
+    letter-spacing:.05em;box-shadow:var(--shadow-xs)}
+  .reg-badge.wh{background:var(--primary)}
+  .reg-badge.sz{background:#0f766e}
+  .reg-badge.ot{background:#b45309}
+  .reg-meta{color:var(--muted);font-size:11.5px}
+  .reg-gmv{margin-left:auto;font-size:12px;color:var(--sub);font-weight:500}
+  .reg-gmv b{color:var(--ink);font-size:18px;font-weight:700;letter-spacing:-.02em;margin-left:4px;
+    font-variant-numeric:tabular-nums}
+  .vs-card{padding:4px 4px 6px}
+  .vs-table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .vs-table th{padding:9px 12px;text-align:right;font-weight:600;color:var(--muted);font-size:11.5px;
+    letter-spacing:.03em;border-bottom:1px solid var(--line);white-space:nowrap}
   .vs-table th:first-child{text-align:left}
-  .vs-table th.vs-wh{color:#4f6ef2}
-  .vs-table th.vs-sz{color:#2ea36c}
-  .vs-table td{padding:9px 12px;border-bottom:1px solid #f4f6fa;text-align:right;white-space:nowrap}
-  .vs-table td:first-child{text-align:left;color:var(--sub);font-weight:600}
+  .vs-table th.vs-wh{color:var(--primary)}
+  .vs-table th.vs-sz{color:#0f766e}
+  .vs-table td{padding:10px 12px;border-bottom:1px solid var(--line-soft);text-align:right;white-space:nowrap}
+  .vs-table td:first-child{text-align:left;color:var(--sub);font-weight:500;font-size:12px}
   .vs-table tr:last-child td{border-bottom:none}
-  .vs-num{font-size:16.5px;font-weight:800;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
-  .vs-num.wh{color:#4f6ef2}
-  .vs-num.sz{color:#2ea36c}
-  .vs-diff{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
-  .vs-diff.up{color:#e0483e}
-  .vs-diff.down{color:#1f9c62}
-  .vs-muted{color:#9aa3b5;font-size:12px}
-  .vs-bar{height:5px;border-radius:3px;background:#eef1f7;overflow:hidden;margin-top:5px;min-width:64px}
-  .vs-bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,#4bbd8a,#2ea36c)}
-  .foot{color:#8a93a6;font-size:12px;text-align:center;margin-top:44px;line-height:1.9}
-  .foot a{color:var(--primary);text-decoration:none}
+  .vs-num{font-size:16px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .vs-num.wh{color:var(--primary)}
+  .vs-num.sz{color:#0f766e}
+  .vs-diff{font-size:11.5px;font-weight:600;font-variant-numeric:tabular-nums}
+  .vs-diff.up{color:var(--up)}
+  .vs-diff.down{color:var(--down)}
+  .vs-muted{color:var(--muted);font-size:11.5px}
+  .vs-bar{height:4px;border-radius:3px;background:#eef2f7;overflow:hidden;margin-top:5px;min-width:64px}
+  .vs-bar i{display:block;height:100%;border-radius:3px;background:#0f766e}
+  .foot{color:var(--muted);font-size:11.5px;text-align:center;margin-top:44px;line-height:1.9}
+  .foot a{color:var(--primary);text-decoration:none;font-weight:500}
   .foot a:hover{text-decoration:underline}
-  .empty-tip{padding:34px;text-align:center;color:var(--sub)}
+  .empty-tip{padding:34px;text-align:center;color:var(--muted);font-size:12.5px}
+
   /* ---------- 导出 ---------- */
   .export-wrap{position:relative}
-  .btn-export{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:10px;border:1px solid #d8e0ef;
-    background:#f7f9fe;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
-    transition:all .18s ease;box-shadow:var(--shadow-sm)}
-  .btn-export:hover{border-color:#aebcf5;color:var(--primary);background:#eef2ff}
-  .btn-export.on{border-color:#b9c6ff;color:var(--primary);background:#e8edff}
-  .btn-export .caret{font-size:10px;color:var(--sub)}
+  .btn-export{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--r-sm);
+    border:1px solid var(--line-strong);background:#fff;color:var(--ink-2);font-size:12.5px;font-weight:500;
+    cursor:pointer;font-family:inherit;transition:all .16s ease;box-shadow:var(--shadow-xs)}
+  .btn-export:hover{border-color:var(--primary-300);color:var(--primary);background:var(--primary-50)}
+  .btn-export.on{border-color:var(--primary-300);color:var(--primary);background:var(--primary-50)}
+  .btn-export .caret{font-size:9px;color:var(--muted)}
   .btn-export.on .caret{color:var(--primary)}
-  .export-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:262px;background:#fff;border:1px solid var(--line);
-    border-radius:14px;box-shadow:var(--shadow-md);padding:8px;z-index:60;display:none}
-  .export-menu.show{display:block;animation:fadeUp .18s ease both}
-  .export-menu-head{font-size:11.5px;color:var(--sub);padding:5px 10px 9px;border-bottom:1px dashed var(--line-soft);margin-bottom:6px;line-height:1.5}
-  .export-menu-head b{color:var(--primary);font-weight:700}
-  .export-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:9px 10px;
-    border:none;background:none;border-radius:9px;color:var(--ink);font-size:13px;font-weight:500;cursor:pointer;
-    text-align:left;font-family:inherit;transition:all .15s ease}
-  .export-item:hover{background:#f4f7ff;color:var(--primary)}
-  .export-item span{font-size:10.5px;color:var(--sub);font-weight:700;letter-spacing:.4px;background:#f2f4fa;border-radius:5px;padding:2px 6px}
-  .export-item:hover span{background:#e6ebff;color:var(--primary)}
-  .export-sep{height:1px;background:var(--line-soft);margin:6px 4px}
-  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(14px);opacity:0;pointer-events:none;
-    background:#171c26;color:#fff;padding:10px 20px;border-radius:11px;font-size:13px;font-weight:500;z-index:99;
-    transition:all .25s ease;box-shadow:0 10px 30px rgba(23,28,38,.25)}
+  .export-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:258px;background:#fff;
+    border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow-md);padding:6px;
+    z-index:60;display:none}
+  .export-menu.show{display:block;animation:fadeUp .16s ease both}
+  .export-menu-head{font-size:11px;color:var(--muted);padding:6px 10px 9px;border-bottom:1px solid var(--line-soft);
+    margin-bottom:5px;line-height:1.6}
+  .export-menu-head b{color:var(--primary);font-weight:600}
+  .export-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+    padding:8px 10px;border:none;background:none;border-radius:7px;color:var(--ink-2);font-size:12.5px;
+    font-weight:500;cursor:pointer;text-align:left;font-family:inherit;transition:all .14s ease}
+  .export-item:hover{background:var(--primary-50);color:var(--primary)}
+  .export-item span{font-size:9.5px;color:var(--muted);font-weight:600;letter-spacing:.06em;
+    background:var(--line-soft);border-radius:4px;padding:2px 5px}
+  .export-item:hover span{background:var(--primary-100);color:var(--primary-600)}
+  .export-sep{height:1px;background:var(--line-soft);margin:5px 4px}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(14px);opacity:0;
+    pointer-events:none;background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--r-sm);
+    font-size:12.5px;font-weight:500;z-index:99;transition:all .24s ease;box-shadow:var(--shadow-md)}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-  /* ---------- 响应式：小屏侧边栏转顶部横向 ---------- */
+
+  /* ---------- 响应式 ---------- */
   @media (max-width:1024px){
     .shell{display:block}
-    .sidebar{position:static;width:auto;padding:14px 16px 10px;flex-direction:row;align-items:center;flex-wrap:wrap;
-      background:linear-gradient(100deg,#2a3155,#1f2742)}
+    .sidebar{position:static;width:auto;padding:12px 16px 10px;flex-direction:row;align-items:center;flex-wrap:wrap;
+      background:var(--side-1)}
     .brand-sub,.side-foot{display:none}
-    .nav{flex-direction:row;flex-wrap:wrap;margin:0;gap:6px}
+    .nav{flex-direction:row;flex-wrap:wrap;margin:0;gap:4px}
     .nav-group{display:flex;align-items:center;gap:4px;margin:0}
     .nav-group-title{display:none}
-    .nav-item{width:auto;margin:0;padding:8px 13px}
+    .nav-item{width:auto;margin:0;padding:7px 12px}
+    .nav-item.active::before{display:none}
     .main{margin-left:0}
     .tabs{margin-left:0;width:100%;overflow-x:auto}
   }
   @media (max-width:760px){
     .kpi-grid{grid-template-columns:repeat(2,1fr)}
+    .kpi.hero .value{font-size:30px}
     .wrap{padding:14px 16px 50px}
-    .topbar-inner{padding:12px 16px}
+    .topbar-inner{padding:11px 16px}
     .topbar .meta{display:none}
+    .slicer-label{flex:0 0 40px;font-size:11px}
   }
 </style>
 </head>
@@ -500,13 +555,13 @@ function cvrTargetOf(w){
 }
 
 /* ---------- 图表通用风格 ---------- */
-const TT={backgroundColor:'#ffffff',borderColor:'#e7eaf1',textStyle:{color:'#171c26'},
-  extraCssText:'box-shadow:0 10px 30px rgba(23,28,38,.14);border-radius:10px;padding:10px 14px;'};
-const AX={axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false},axisLabel:{color:'#667085'}};
-const GRID_S={lineStyle:{color:'#eef1f7'}};
-const GRAD_BLUE=new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#6d8bff'},{offset:1,color:'#4f6ef2'}]);
-const GRAD_ORANGE=new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#ffc069'},{offset:1,color:'#f59e0b'}]);
-const GRAD_HBLUE=new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#4f6ef2'},{offset:1,color:'#7c9bff'}]);
+const TT={backgroundColor:'#ffffff',borderColor:'#e6eaf1',textStyle:{color:'#0f172a'},
+  extraCssText:'box-shadow:0 10px 30px rgba(15,23,42,.14);border-radius:10px;padding:10px 14px;'};
+const AX={axisLine:{lineStyle:{color:'#e2e8f0'}},axisTick:{show:false},axisLabel:{color:'#64748b'}};
+const GRID_S={lineStyle:{color:'#eef2f7'}};
+const GRAD_BLUE=new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#818cf8'},{offset:1,color:'#4f46e5'}]);
+const GRAD_ORANGE=new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#fbbf24'},{offset:1,color:'#d97706'}]);
+const GRAD_HBLUE=new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#4f46e5'},{offset:1,color:'#a5b4fc'}]);
 
 document.getElementById('updated').textContent = D.updated_at;
 document.getElementById('updated2').textContent = D.updated_at;
@@ -783,7 +838,7 @@ function renderKpi(){
 function renderGoals(){
   const g=document.getElementById('goalGrid');
   const whos=activeWhos();
-  const grads=['linear-gradient(90deg,#4f6ef2,#7c9bff)','linear-gradient(90deg,#2ea36c,#67d59a)','linear-gradient(90deg,#f59e0b,#ffc069)'];
+  const grads=['linear-gradient(90deg,#4f46e5,#a5b4fc)','linear-gradient(90deg,#059669,#34d399)','linear-gradient(90deg,#d97706,#fbbf24)'];
   let html='';
   whos.forEach(w=>{
     const t=D[w].total||{};
@@ -798,7 +853,7 @@ function renderGoals(){
       const over=percent!=null&&percent>100;
       html+=`<div class="goal"><div class="g-head"><span class="g-name"><span class="who who-${w}" style="margin-right:6px">${whoName}</span>${name}</span>
         <span class="g-val ${over?'down':'up'}">${percent==null?'—':percent.toFixed(1)+'%'}</span></div>
-        <div class="bar-track"><div class="bar-fill" style="width:${p}%;background:${over?'linear-gradient(90deg,#e5484d,#ff8a8f)':grads[i]}"></div></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${p}%;background:${over?'linear-gradient(90deg,#dc2626,#f87171)':grads[i]}"></div></div>
         <div class="g-sub">${sub}</div></div>`;
     });
   });
@@ -824,16 +879,16 @@ function trendCharts(){
   const series=[];
   if(showAliu) series.push({name:'阿留 实际GMV',type:'bar',data:qis.map(q=>get(q,'aliu').realGmv),itemStyle:{borderRadius:[6,6,0,0],color:GRAD_BLUE},barMaxWidth:34});
   if(showDianbo) series.push({name:'店播 实际GMV',type:'bar',data:qis.map(q=>get(q,'dianbo').realGmv),itemStyle:{borderRadius:[6,6,0,0],color:GRAD_ORANGE},barMaxWidth:34});
-  if(showAliu) series.push({name:'阿留 转化率',type:'line',yAxisIndex:1,smooth:true,data:qis.map(q=>qiCvr(get(q,'aliu'))),itemStyle:{color:'#7c5cff'},lineStyle:{width:2.5},symbolSize:6});
-  if(showDianbo) series.push({name:'店播 转化率',type:'line',yAxisIndex:1,smooth:true,data:qis.map(q=>qiCvr(get(q,'dianbo'))),itemStyle:{color:'#e5484d'},lineStyle:{width:2.5},symbolSize:6});
+  if(showAliu) series.push({name:'阿留 转化率',type:'line',yAxisIndex:1,smooth:true,data:qis.map(q=>qiCvr(get(q,'aliu'))),itemStyle:{color:'#7c3aed'},lineStyle:{width:2.5},symbolSize:6});
+  if(showDianbo) series.push({name:'店播 转化率',type:'line',yAxisIndex:1,smooth:true,data:qis.map(q=>qiCvr(get(q,'dianbo'))),itemStyle:{color:'#dc2626'},lineStyle:{width:2.5},symbolSize:6});
   const c1=echarts.init(document.getElementById('chartTrend'));
   c1.setOption({
-    tooltip:{trigger:'axis',axisPointer:{type:'shadow',shadowStyle:{color:'rgba(79,110,242,.06)'}},valueFormatter:v=>v==null?'—':('¥'+fmtW(v)),...TT},
-    legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow',shadowStyle:{color:'rgba(79,70,229,.06)'}},valueFormatter:v=>v==null?'—':('¥'+fmtW(v)),...TT},
+    legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#475569'}},
     grid:{left:60,right:60,top:40,bottom:30},
     xAxis:{type:'category',data:qis,...AX},
-    yAxis:[{type:'value',name:'GMV',axisLabel:{color:'#667085',formatter:v=>(v/1e4).toFixed(0)+'万'},nameTextStyle:{color:'#667085'},splitLine:GRID_S},
-           {type:'value',name:'转化率(%)',position:'right',axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:{show:false},axisLine:{show:false}}],
+    yAxis:[{type:'value',name:'GMV',axisLabel:{color:'#64748b',formatter:v=>(v/1e4).toFixed(0)+'万'},nameTextStyle:{color:'#64748b'},splitLine:GRID_S},
+           {type:'value',name:'转化率(%)',position:'right',axisLabel:{color:'#64748b',formatter:'{value}%'},nameTextStyle:{color:'#64748b'},splitLine:{show:false},axisLine:{show:false}}],
     series},{notMerge:true});
   charts.t1=c1;
 }
@@ -956,11 +1011,11 @@ function groupCharts(){
         const g=gs[p[0].dataIndex];
         return `${g.label}（${g.whoName}）<br>成交GMV: ¥${fmtW(g.gmv)}<br>GMV占比: ${share(g)}<br>实际GMV: ¥${fmtW(g.realGmv)}<br>完成率: ${g.rate==null?'—':g.rate.toFixed(1)+'%'}<br>转化率: ${g.cvr.toFixed(2)}%`},...TT},
       grid:{left:90,right:150,top:10,bottom:20},
-      xAxis:{type:'value',axisLabel:{color:'#667085',formatter:v=>(v/1e4).toFixed(0)+'万'},splitLine:GRID_S,axisLine:{show:false}},
+      xAxis:{type:'value',axisLabel:{color:'#64748b',formatter:v=>(v/1e4).toFixed(0)+'万'},splitLine:GRID_S,axisLine:{show:false}},
       yAxis:{type:'category',data:gs.map(g=>g.label),inverse:true,...AX,axisLine:{show:false}},
       series:[{name:'成交GMV',type:'bar',data:gs.map(g=>g.gmv),barMaxWidth:18,
         itemStyle:{borderRadius:[0,6,6,0],color:GRAD_HBLUE},
-        label:{show:true,position:'right',color:'#5a6377',fontWeight:600,formatter:p=>{const g=gs[p.dataIndex];return '¥'+fmtW(g.gmv)+' · '+share(g);}}}]},{notMerge:true});
+        label:{show:true,position:'right',color:'#475569',fontWeight:600,formatter:p=>{const g=gs[p.dataIndex];return '¥'+fmtW(g.gmv)+' · '+share(g);}}}]},{notMerge:true});
     const gr=gs.filter(g=>g.rate!=null);
     // 目标线用该业务线真实的转化率月度目标（阿留24% / 店播14%），而不是写死的100%
     const tgt=cvrTargetOf(w);
@@ -970,18 +1025,18 @@ function groupCharts(){
         const g=gr[p[0].dataIndex]; if(!g) return '';
         const goal=tgt?`<br>转化达成: ${(g.cvr/tgt*100).toFixed(1)}%（目标 ${tgt}%）`:'';
         return `${g.label}（${g.whoName}）<br>实际转化率: <b>${g.cvr.toFixed(2)}%</b>${goal}<br>GMV完成率: <b>${g.rate==null?'—':g.rate.toFixed(1)+'%'}</b><br>线索 ${g.leads.toLocaleString()} · 有效订单 ${(g.orders-g.refunds).toLocaleString()}`}},
-      legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+      legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#475569'}},
       grid:{left:64,right:78,top:40,bottom:80},
-      xAxis:{type:'category',data:gr.map(g=>g.label),axisLabel:{color:'#667085',rotate:35},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
-      yAxis:[{type:'value',name:'转化率(%)',max:cvrMax,splitNumber:6,axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:GRID_S},
-             {type:'value',name:'完成率(%)',position:'right',max:120,interval:40,axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:{show:false},axisLine:{show:false}}],
+      xAxis:{type:'category',data:gr.map(g=>g.label),axisLabel:{color:'#64748b',rotate:35},axisLine:{lineStyle:{color:'#e2e8f0'}},axisTick:{show:false}},
+      yAxis:[{type:'value',name:'转化率(%)',max:cvrMax,splitNumber:6,axisLabel:{color:'#64748b',formatter:'{value}%'},nameTextStyle:{color:'#64748b'},splitLine:GRID_S},
+             {type:'value',name:'完成率(%)',position:'right',max:120,interval:40,axisLabel:{color:'#64748b',formatter:'{value}%'},nameTextStyle:{color:'#64748b'},splitLine:{show:false},axisLine:{show:false}}],
       series:[
         {name:'实际转化率',type:'bar',data:gr.map(g=>+g.cvr.toFixed(2)),itemStyle:{color:GRAD_BLUE,borderRadius:[6,6,0,0]},barMaxWidth:24,
-         markLine:{silent:true,symbol:'none',lineStyle:{type:'dashed',color:'#e5484d',width:1.5},
-           label:{formatter:'转化目标 '+tgt+'%',color:'#e5484d',fontSize:11,fontWeight:700,position:'insideStartTop'},
+         markLine:{silent:true,symbol:'none',lineStyle:{type:'dashed',color:'#dc2626',width:1.5},
+           label:{formatter:'转化目标 '+tgt+'%',color:'#dc2626',fontSize:11,fontWeight:700,position:'insideStartTop'},
            data:[{yAxis:tgt}]}},
-        {name:'GMV完成率',type:'line',yAxisIndex:1,data:gr.map(g=>+g.rate.toFixed(1)),itemStyle:{color:'#2ea36c'},lineStyle:{width:2.5},smooth:true,symbolSize:6,
-         endLabel:{show:true,formatter:'{c}%',color:'#2ea36c',fontSize:11,fontWeight:700,offset:[12,0]}}]},{notMerge:true});
+        {name:'GMV完成率',type:'line',yAxisIndex:1,data:gr.map(g=>+g.rate.toFixed(1)),itemStyle:{color:'#059669'},lineStyle:{width:2.5},smooth:true,symbolSize:6,
+         endLabel:{show:true,formatter:'{c}%',color:'#059669',fontSize:11,fontWeight:700,offset:[12,0]}}]},{notMerge:true});
   });
   document.getElementById('groupCount').textContent=`筛选后共 ${shown} 个小组（当前口径共 ${total} 个）`;
 }
@@ -1301,22 +1356,22 @@ function renderRegion(){
     const qs=Object.keys(byQi).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
     const cvrOf=q=>{const m=byQi[q];return +(m.leads>0?(m.orders-m.refunds)/m.leads*100:0).toFixed(2);};
     const color=def.key==='shenzhen'
-      ?new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#5ecb99'},{offset:1,color:'#2ea36c'}])
+      ?new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#34d399'},{offset:1,color:'#059669'}])
       :def.key==='other'?GRAD_ORANGE:GRAD_BLUE;
     const c=echarts.init(el); charts['reg-'+def.key]=c;
     c.setOption({
       tooltip:{trigger:'axis',...TT,formatter:p=>{
         const q=qs[p[0].dataIndex], m=byQi[q];
         return `${def.name} · ${q}<br>实际GMV: <b>¥${fmtW(m.gmv)}</b><br>实际转化率: ${cvrOf(q).toFixed(2)}%<br>线索 ${m.leads.toLocaleString()} · 订单 ${m.orders.toLocaleString()}`;}},
-      legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+      legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#475569'}},
       grid:{left:64,right:64,top:40,bottom:34},
-      xAxis:{type:'category',data:qs,axisLabel:{color:'#667085'},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
-      yAxis:[{type:'value',name:'实际GMV',axisLabel:{color:'#667085',formatter:v=>(v/1e4).toFixed(0)+'万'},nameTextStyle:{color:'#667085'},splitLine:GRID_S,axisLine:{show:false}},
-             {type:'value',name:'转化率(%)',position:'right',max:v=>Math.ceil(v.max*1.3),axisLabel:{color:'#667085',formatter:'{value}%'},nameTextStyle:{color:'#667085'},splitLine:{show:false},axisLine:{show:false}}],
+      xAxis:{type:'category',data:qs,axisLabel:{color:'#64748b'},axisLine:{lineStyle:{color:'#e2e8f0'}},axisTick:{show:false}},
+      yAxis:[{type:'value',name:'实际GMV',axisLabel:{color:'#64748b',formatter:v=>(v/1e4).toFixed(0)+'万'},nameTextStyle:{color:'#64748b'},splitLine:GRID_S,axisLine:{show:false}},
+             {type:'value',name:'转化率(%)',position:'right',max:v=>Math.ceil(v.max*1.3),axisLabel:{color:'#64748b',formatter:'{value}%'},nameTextStyle:{color:'#64748b'},splitLine:{show:false},axisLine:{show:false}}],
       series:[
         {name:'实际GMV',type:'bar',data:qs.map(q=>+byQi[q].gmv.toFixed(0)),barMaxWidth:34,itemStyle:{color,borderRadius:[6,6,0,0]}},
-        {name:'实际转化率',type:'line',yAxisIndex:1,smooth:true,symbolSize:7,lineStyle:{width:2.5,color:'#7c5cff'},itemStyle:{color:'#7c5cff'},
-         data:qs.map(cvrOf),endLabel:{show:true,formatter:'{c}%',color:'#7c5cff',fontSize:11,fontWeight:700}}
+        {name:'实际转化率',type:'line',yAxisIndex:1,smooth:true,symbolSize:7,lineStyle:{width:2.5,color:'#7c3aed'},itemStyle:{color:'#7c3aed'},
+         data:qs.map(cvrOf),endLabel:{show:true,formatter:'{c}%',color:'#7c3aed',fontSize:11,fontWeight:700}}
       ]},{notMerge:true});
   });
 }
@@ -1347,10 +1402,10 @@ function procChart(){
   if(state.who!=='dianbo') series.push({name:'阿留均值',type:'bar',data:PROC_CHART_FIELDS.map(f=>avg(dataBy.aliu,f)),itemStyle:{color:GRAD_BLUE,borderRadius:[6,6,0,0]},barMaxWidth:24});
   if(state.who!=='aliu') series.push({name:'店播均值',type:'bar',data:PROC_CHART_FIELDS.map(f=>avg(dataBy.dianbo,f)),itemStyle:{color:GRAD_ORANGE,borderRadius:[6,6,0,0]},barMaxWidth:24});
   c.setOption({
-    tooltip:{trigger:'axis',valueFormatter:v=>v+'%',...TT},legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#5a6377'}},
+    tooltip:{trigger:'axis',valueFormatter:v=>v+'%',...TT},legend:{top:0,icon:'roundRect',itemWidth:12,itemHeight:8,textStyle:{color:'#475569'}},
     grid:{left:50,right:30,top:40,bottom:30},
-    xAxis:{type:'category',data:PROC_CHART_FIELDS,axisLabel:{color:'#667085',interval:0,rotate:20},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
-    yAxis:{type:'value',axisLabel:{color:'#667085',formatter:'{value}%'},splitLine:GRID_S,axisLine:{show:false}},
+    xAxis:{type:'category',data:PROC_CHART_FIELDS,axisLabel:{color:'#64748b',interval:0,rotate:20},axisLine:{lineStyle:{color:'#e2e8f0'}},axisTick:{show:false}},
+    yAxis:{type:'value',axisLabel:{color:'#64748b',formatter:'{value}%'},splitLine:GRID_S,axisLine:{show:false}},
     series},{notMerge:true});
   charts.proc=c;
 }
@@ -1432,17 +1487,17 @@ function renderChannel(){
   const cc=charts.channel=charts.channel||echarts.init(document.getElementById('chartChannel'));
   cc.setOption({
     tooltip:{trigger:'axis',axisPointer:{type:'shadow'},...TT},
-    legend:{data:['线索量','订单量','订单转化率'],top:4,textStyle:{color:'#667085'}},
+    legend:{data:['线索量','订单量','订单转化率'],top:4,textStyle:{color:'#64748b'}},
     grid:{left:56,right:56,top:48,bottom:40},
-    xAxis:{type:'category',data:names,axisLabel:{color:'#667085',interval:0},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
+    xAxis:{type:'category',data:names,axisLabel:{color:'#64748b',interval:0},axisLine:{lineStyle:{color:'#e2e8f0'}},axisTick:{show:false}},
     yAxis:[
-      {type:'value',name:'量',axisLabel:{color:'#667085'},splitLine:GRID_S,axisLine:{show:false}},
-      {type:'value',name:'转化率',axisLabel:{color:'#667085',formatter:'{value}%'},splitLine:{show:false},axisLine:{show:false}}
+      {type:'value',name:'量',axisLabel:{color:'#64748b'},splitLine:GRID_S,axisLine:{show:false}},
+      {type:'value',name:'转化率',axisLabel:{color:'#64748b',formatter:'{value}%'},splitLine:{show:false},axisLine:{show:false}}
     ],
     series:[
       {name:'线索量',type:'bar',data:leadsArr,itemStyle:{color:GRAD_BLUE,borderRadius:[4,4,0,0]},barMaxWidth:26},
       {name:'订单量',type:'bar',data:ordersArr,itemStyle:{color:GRAD_ORANGE,borderRadius:[4,4,0,0]},barMaxWidth:26},
-      {name:'订单转化率',type:'line',yAxisIndex:1,data:cvrArr,smooth:true,symbolSize:7,lineStyle:{color:'#7c5cff',width:2.5},itemStyle:{color:'#7c5cff'}}
+      {name:'订单转化率',type:'line',yAxisIndex:1,data:cvrArr,smooth:true,symbolSize:7,lineStyle:{color:'#7c3aed',width:2.5},itemStyle:{color:'#7c3aed'}}
     ]
   },true);
 
@@ -1477,8 +1532,8 @@ function renderChannel(){
     list.map(r=>{
       const showQi=!seen[r['期次']]; seen[r['期次']]=1;
       const qiTd=showQi
-        ? `<td style="text-align:center;font-weight:700;color:var(--primary);background:#f6f8ff">${r['期次']}</td>`
-        : `<td style="background:#f6f8ff"></td>`;
+        ? `<td style="text-align:center;font-weight:700;color:var(--primary);background:#eef2ff">${r['期次']}</td>`
+        : `<td style="background:#eef2ff"></td>`;
       return `<tr>${qiTd}<td style="text-align:left;font-weight:600">${r['渠道']}</td>`+
         `<td style="text-align:left">${r._lead?r._lead.toLocaleString('zh-CN'):'—'}</td>`+
         `<td style="text-align:right">${r._order?r._order.toLocaleString('zh-CN'):'—'}</td>`+
@@ -1536,10 +1591,10 @@ function renderChanTrend(rows){
   const ct=charts.chanTrend=charts.chanTrend||echarts.init(document.getElementById('chartChanTrend'));
   ct.setOption({
     tooltip:{trigger:'axis',...TT},
-    legend:{data:names,top:2,textStyle:{color:'#667085'}},
+    legend:{data:names,top:2,textStyle:{color:'#64748b'}},
     grid:{left:56,right:28,top:44,bottom:40},
-    xAxis:{type:'category',data:qis,boundaryGap:false,axisLabel:{color:'#667085'},axisLine:{lineStyle:{color:'#dfe3ec'}},axisTick:{show:false}},
-    yAxis:{type:'value',axisLabel:{color:'#667085',formatter:isRate?'{value}%':'{value}'},splitLine:GRID_S,axisLine:{show:false}},
+    xAxis:{type:'category',data:qis,boundaryGap:false,axisLabel:{color:'#64748b'},axisLine:{lineStyle:{color:'#e2e8f0'}},axisTick:{show:false}},
+    yAxis:{type:'value',axisLabel:{color:'#64748b',formatter:isRate?'{value}%':'{value}'},splitLine:GRID_S,axisLine:{show:false}},
     series
   },true);
 }
