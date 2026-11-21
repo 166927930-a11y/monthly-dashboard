@@ -106,6 +106,19 @@
   .kpi .g-sub{color:var(--sub);font-size:12px;margin-top:5px}
   .up{color:var(--up)} .down{color:var(--down)}
 
+  /* ---------- 销冠卡片（员工排名页顶部） ---------- */
+  .champ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin:12px 0 2px}
+  .champ{position:relative;background:linear-gradient(135deg,#fffdf2,#fff6d9);border:1px solid #f0dda0;border-radius:var(--r);padding:16px 20px;
+    box-shadow:0 4px 14px rgba(214,158,20,.12);transition:transform .2s ease,box-shadow .2s ease;overflow:hidden}
+  .champ:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(214,158,20,.22)}
+  .champ::after{content:'🏆';position:absolute;right:14px;top:12px;font-size:32px;filter:drop-shadow(0 2px 4px rgba(214,158,20,.35))}
+  .champ .c-tag{font-size:11px;font-weight:700;color:#a16a00;letter-spacing:1px}
+  .champ .c-name{font-size:23px;font-weight:800;margin-top:5px;color:#7a5200;letter-spacing:-.3px}
+  .champ .c-group{display:inline-block;margin-left:10px;font-size:12px;font-weight:600;background:#fff;color:#a16a00;border:1px solid #eed9a0;border-radius:999px;padding:2px 11px;vertical-align:4px}
+  .champ .c-stats{display:flex;flex-wrap:wrap;gap:7px 20px;margin-top:11px;color:#8a6a1f;font-size:12px}
+  .champ .c-stats b{color:#5d4305;font-variant-numeric:tabular-nums;font-size:13.5px;margin-left:3px}
+  .champ .c-scope{margin-top:9px;color:#b98a1f;font-size:11px}
+
   /* ---------- 卡片 / 图表 ---------- */
   .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px;box-shadow:var(--shadow-sm);transition:box-shadow .25s ease}
   .card:hover{box-shadow:var(--shadow-md)}
@@ -321,6 +334,7 @@
       <input class="search" id="rankSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
     </div>
     <div class="rank-tip" id="rankQiTip"><b>两种口径</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表）。<b>名次与 🥇🥈🥉 跟随当前排序指标</b>——换指标或点表头，名次和金银铜牌一起重排。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
+    <div class="champ-grid" id="rankChamps"></div>
     <div id="rankSections"></div>
   </div>
 
@@ -926,6 +940,7 @@ function renderRank(){
   const qiActive=qsel.length!==allQis.length;
   const filt=d=>(d&&d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)));
   let html='',shown=0,total=0;
+  const champs=[];  /* 销冠：各业务线在当前筛选内按主指标成交GMV(含退款)的第 1 名 */
   (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
     if(qiActive&&D.rankByQi&&D.rankByQi[w]){
       /* ---- 期次明细模式：显示所选期次内每个员工的当期数据与动态名次 ---- */
@@ -940,6 +955,7 @@ function renderRank(){
         rows.sort((a,b)=>{const va=num(a[sf]),vb=num(b[sf]);return rankSort.dir==='desc'?vb-va:va-vb;});
         rows.forEach((r,i)=>{r._rank=i+1;});
         html+=`<div class="sec-title">${WHO_NAME[w]} · ${qi} 员工排名（${rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
+        champs.push({w,r:rows.reduce((a,b)=>num(b[RANK_PRIMARY])>num(a[RANK_PRIMARY])?b:a),scope:qi});
       });
     }else{
       /* ---- 月度累计模式（不选期次时） ---- */
@@ -954,8 +970,22 @@ function renderRank(){
       });
       rows.forEach((r,i)=>{r._rank=i+1;});
       html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(RANK_COLS,rows,RANK_SORTABLE);
+      if(rows.length) champs.push({w,r:rows.reduce((a,b)=>num(b[RANK_PRIMARY])>num(a[RANK_PRIMARY])?b:a),scope:'月度累计'});
     }
   });
+  const champHtml=champs.length?`<div class="champ-grid">${champs.map(c=>`
+    <div class="champ">
+      <div class="c-tag">${WHO_NAME[c.w]} 销冠 · ${c.scope}</div>
+      <div class="c-name">🥇 ${c.r['姓名']||'—'}<span class="c-group">${normGroup(c.r['小组'])||'—'}</span></div>
+      <div class="c-stats">
+        <span>成交GMV<b>${fmtMoney(num(c.r[RANK_PRIMARY]))}</b></span>
+        <span>实际GMV<b>${fmtMoney(num(c.r['实际GMV']))}</b></span>
+        <span>线索<b>${num(c.r['线索量']).toLocaleString('zh-CN')}</b></span>
+        <span>订单<b>${num(c.r['订单量']).toLocaleString('zh-CN')}</b></span>
+        <span>实际转化率<b>${pctTxt(c.r['实际转化率'])}</b></span>
+      </div>
+    </div>`).join('')}</div>`:'';
+  document.getElementById('rankChamps').innerHTML=champHtml;
   document.getElementById('rankSections').innerHTML=html||'<div class="empty-tip" style="padding:24px;text-align:center;color:var(--sub)">没有匹配的期次明细数据</div>';
   document.getElementById('rankCount').textContent=qiActive
     ?`已选期次 ${qsel.join(' / ')} · 筛选后共 ${shown} 条（原始 ${total} 条）`
