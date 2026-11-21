@@ -333,7 +333,7 @@
       </div>
       <input class="search" id="rankSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
     </div>
-    <div class="rank-tip" id="rankQiTip"><b>两种口径</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表）。<b>名次与 🥇🥈🥉 跟随当前排序指标</b>——换指标或点表头，名次和金银铜牌一起重排。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
+    <div class="rank-tip" id="rankQiTip"><b>销管口径</b>：名次默认按<b>实际转化率</b>（有效订单 ÷ 线索）从高到低排列，并列时以实际GMV靠前者优先；也可切换排序指标或点表头重排。<b>两种范围</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表）。<b>名次与 🥇🥈🥉 跟随当前排序指标</b>。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
     <div class="champ-grid" id="rankChamps"></div>
     <div id="rankSections"></div>
   </div>
@@ -906,15 +906,23 @@ document.getElementById('groupSearch').addEventListener('input',e=>{
 });
 
 /* ================= 员工排名 ================= */
-const RANK_COLS=['排名','姓名','小组','成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
+const RANK_COLS=['排名','姓名','小组','实际转化率','成交GMV(含退款)','线索量','订单量','退款率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
 const WHO_NAME={aliu:'阿留',dianbo:'店播'};
 /* 可排序的数值列 + 排序状态（名次始终按主指标「成交GMV(含退款)」在当前筛选内降序重算） */
 const RANK_SORTABLE=['成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
 /* 期次明细模式（数据来自转化小组引用表）：列与可排序字段略有不同 */
-const PERIOD_RANK_COLS=['排名','姓名','小组','成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','追单率'];
+const PERIOD_RANK_COLS=['排名','姓名','小组','实际转化率','成交GMV(含退款)','线索量','订单量','退款率','实际GMV','追单率'];
 const PERIOD_SORTABLE=['成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','追单率'];
-const RANK_PRIMARY='成交GMV(含退款)';
-let rankSort={field:RANK_PRIMARY,dir:'desc'};
+const RANK_PRIMARY='成交GMV(含退款)';          /* 销冠卡片口径：成交GMV */
+const RANK_DEFAULT_FIELD='实际转化率';          /* 销管排名默认口径：实际转化率（有效订单 / 线索） */
+let rankSort={field:RANK_DEFAULT_FIELD,dir:'desc'};
+/* 排名比较：主指标相同（如转化率并列）时，用实际GMV作次级排序，保证名次稳定 */
+function cmpRank(a,b,sf,dir){
+  const va=num(a[sf]),vb=num(b[sf]);
+  if(va!==vb) return dir==='desc'?vb-va:va-vb;
+  const ga=num(a['实际GMV']),gb=num(b['实际GMV']);
+  return rankSort.dir==='desc'?gb-ga:ga-gb;
+}
 function rankTableHtml(cols,rows,sortable){
   sortable=sortable||RANK_SORTABLE;
   if(!rows.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
@@ -952,7 +960,7 @@ function renderRank(){
         shown+=rows.length;
         /* 名次与金银铜牌跟随当前排序指标：先按排序字段排好，再依次赋予 1..N */
         const sf=rows[0]&&(rankSort.field in rows[0])?rankSort.field:RANK_PRIMARY;
-        rows.sort((a,b)=>{const va=num(a[sf]),vb=num(b[sf]);return rankSort.dir==='desc'?vb-va:va-vb;});
+        rows.sort((a,b)=>cmpRank(a,b,sf,rankSort.dir));
         rows.forEach((r,i)=>{r._rank=i+1;});
         html+=`<div class="sec-title">${WHO_NAME[w]} · ${qi} 员工排名（${rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
         champs.push({w,r:rows.reduce((a,b)=>num(b[RANK_PRIMARY])>num(a[RANK_PRIMARY])?b:a),scope:qi});
@@ -964,10 +972,7 @@ function renderRank(){
       shown+=rows.length; total+=d.rows.length;
       /* 名次与金银铜牌跟随当前排序指标：先按排序字段排好，再依次赋予 1..N */
       const sf=rows[0]&&(rankSort.field in rows[0])?rankSort.field:RANK_PRIMARY;
-      rows.sort((a,b)=>{
-        const va=num(a[sf]),vb=num(b[sf]);
-        return rankSort.dir==='desc'?vb-va:va-vb;
-      });
+      rows.sort((a,b)=>cmpRank(a,b,sf,rankSort.dir));
       rows.forEach((r,i)=>{r._rank=i+1;});
       html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(RANK_COLS,rows,RANK_SORTABLE);
       if(rows.length) champs.push({w,r:rows.reduce((a,b)=>num(b[RANK_PRIMARY])>num(a[RANK_PRIMARY])?b:a),scope:'月度累计'});
@@ -975,7 +980,7 @@ function renderRank(){
   });
   const champHtml=champs.length?`<div class="champ-grid">${champs.map(c=>`
     <div class="champ">
-      <div class="c-tag">${WHO_NAME[c.w]} 销冠 · ${c.scope}</div>
+      <div class="c-tag">${WHO_NAME[c.w]} 销冠 · ${c.scope} · 按成交GMV</div>
       <div class="c-name">🥇 ${c.r['姓名']||'—'}<span class="c-group">${normGroup(c.r['小组'])||'—'}</span></div>
       <div class="c-stats">
         <span>成交GMV<b>${fmtMoney(num(c.r[RANK_PRIMARY]))}</b></span>
@@ -1502,7 +1507,7 @@ function rankExportData(){
   const out=[];
   const push=(w,label,list)=>{
     const sf=list[0]&&(rankSort.field in list[0])?rankSort.field:RANK_PRIMARY;
-    list.sort((a,b)=>{const va=num(a[sf]),vb=num(b[sf]);return rankSort.dir==='desc'?vb-va:va-vb;});
+    list.sort((a,b)=>cmpRank(a,b,sf,rankSort.dir));
     list.forEach((r,i)=>out.push([EXP_WHO(w),label,i+1,r['姓名']||'',r['小组']||'',
       expRankCell(r,'成交GMV(含退款)'),expRankCell(r,'线索量'),expRankCell(r,'订单量'),expRankCell(r,'退款率'),
       expRankCell(r,'实际转化率'),expRankCell(r,'实际GMV'),r['销售期次']||'',
