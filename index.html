@@ -68,6 +68,12 @@
   .topbar h1{font-size:19px;font-weight:800;letter-spacing:.2px;color:#1b2233}
   .tb-crumb{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--primary);
     background:rgba(74,99,232,.10);border:1px solid rgba(74,99,232,.18);border-radius:999px;padding:3px 10px}
+  .tabs{display:flex;gap:6px;margin-left:auto;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:12px;padding:4px}
+  .tab{padding:7px 17px;border-radius:9px;cursor:pointer;color:var(--sub);font-weight:600;border:none;background:none;font-size:13.5px;font-family:inherit;transition:all .22s ease;white-space:nowrap}
+  .tab.hidden{display:none}
+  .tab.disabled{opacity:.4;cursor:not-allowed}
+  .tab:hover{color:var(--primary);background:rgba(74,99,232,.08)}
+  .tab.active{background:linear-gradient(120deg,#4a63e8,#6d5cf0);color:#fff;box-shadow:0 4px 12px rgba(74,99,232,.34)}
   .topbar .meta{color:var(--sub);font-size:12px;display:flex;align-items:center;
     background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:999px;padding:5px 14px}
   .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--down);margin-right:6px;
@@ -275,6 +281,7 @@
     .nav-group-title{display:none}
     .nav-item{width:auto;margin:0;padding:8px 13px}
     .main{margin-left:0}
+    .tabs{margin-left:0;width:100%;overflow-x:auto}
   }
   @media (max-width:760px){
     .kpi-grid{grid-template-columns:repeat(2,1fr)}
@@ -289,25 +296,11 @@
 <aside class="sidebar">
   <div class="brand"><span class="brand-mark">📊</span><span>月度经营看板</span></div>
   <div class="brand-sub">新月度 · 销管口径</div>
-  <nav class="nav" id="tabs">
-    <div class="nav-group">
-      <div class="nav-group-title">员工</div>
-      <button class="nav-item tab active" data-page="overview"><i>📈</i>月度</button>
-      <button class="nav-item tab" data-page="rank"><i>🏅</i>员工排名</button>
-    </div>
-    <div class="nav-group">
-      <div class="nav-group-title">管理</div>
-      <button class="nav-item tab" data-page="region"><i>🗺️</i>阿留分区</button>
-      <button class="nav-item tab" data-page="groups"><i>🧩</i>小组对比</button>
-    </div>
-    <div class="nav-group">
-      <div class="nav-group-title">过程</div>
-      <button class="nav-item tab" data-page="process"><i>🎯</i>过程数据</button>
-    </div>
-    <div class="nav-group">
-      <div class="nav-group-title">渠道</div>
-      <button class="nav-item tab" data-page="channel"><i>🔗</i>渠道转化</button>
-    </div>
+  <nav class="nav" id="navGroups">
+    <button class="nav-item active" data-group="staff"><i>👥</i>员工</button>
+    <button class="nav-item" data-group="manage"><i>🗂️</i>管理</button>
+    <button class="nav-item" data-group="process"><i>🎯</i>过程</button>
+    <button class="nav-item" data-group="channel"><i>🔗</i>渠道</button>
   </nav>
   <div class="side-foot">数据每小时自动同步飞书表格<br>更新于 <span id="sideUpdated">—</span></div>
 </aside>
@@ -319,6 +312,14 @@
       <span class="tb-crumb" id="pageCrumb">员工</span>
     </div>
     <span class="meta"><span class="dot"></span>数据更新于 <b id="updated">—</b> · 每小时自动同步飞书表格</span>
+    <div class="tabs" id="tabs">
+      <button class="tab active" data-page="overview" data-group="staff">月度</button>
+      <button class="tab" data-page="rank" data-group="staff">员工排名</button>
+      <button class="tab" data-page="region" data-group="manage">阿留分区</button>
+      <button class="tab" data-page="groups" data-group="manage">小组对比</button>
+      <button class="tab" data-page="process" data-group="process">过程数据</button>
+      <button class="tab" data-page="channel" data-group="channel">渠道转化</button>
+    </div>
     <div class="export-wrap" id="exportWrap">
       <button class="btn-export" id="exportBtn" title="导出当前筛选结果">⤓ 导出 <span class="caret">▾</span></button>
       <div class="export-menu" id="exportMenu">
@@ -670,23 +671,35 @@ function toggleSort(cfg,key){ if(cfg.field===key) cfg.dir=cfg.dir==='desc'?'asc'
 
 /* ================= 页签 ================= */
 const PAGE_META={
-  overview:{title:'月度总览',group:'员工'},
-  rank:{title:'员工排名',group:'员工'},
-  region:{title:'阿留分区',group:'管理'},
-  groups:{title:'小组对比',group:'管理'},
-  process:{title:'过程数据',group:'过程'},
-  channel:{title:'渠道转化',group:'渠道'}
+  overview:{title:'月度总览',group:'staff',groupName:'员工'},
+  rank:{title:'员工排名',group:'staff',groupName:'员工'},
+  region:{title:'阿留分区',group:'manage',groupName:'管理'},
+  groups:{title:'小组对比',group:'manage',groupName:'管理'},
+  process:{title:'过程数据',group:'process',groupName:'过程'},
+  channel:{title:'渠道转化',group:'channel',groupName:'渠道'}
 };
+/* 侧边栏大组 → 进组默认页；阿留分区在店播口径下不可用，退到小组对比 */
+const GROUP_FIRST={staff:'overview',manage:'region',process:'process',channel:'channel'};
+function groupEntry(g){
+  const p=GROUP_FIRST[g]||'overview';
+  return (p==='region'&&state.who==='dianbo')?'groups':p;
+}
 let curPage='overview';
 function showPage(id){
   curPage=id;
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
-  document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.toggle('active',t.dataset.page===id));
-  const meta=PAGE_META[id];
-  if(meta){
+  const meta=PAGE_META[id]||{};
+  /* 顶栏小页签：只显示当前大组下的页面 */
+  document.querySelectorAll('#tabs .tab').forEach(t=>{
+    t.classList.toggle('hidden', t.dataset.group!==meta.group);
+    t.classList.toggle('active', t.dataset.page===id);
+  });
+  /* 侧边栏大组高亮 */
+  document.querySelectorAll('#navGroups .nav-item').forEach(b=>b.classList.toggle('active',b.dataset.group===meta.group));
+  if(meta.title){
     document.getElementById('pageTitle').textContent=meta.title;
-    document.getElementById('pageCrumb').textContent=meta.group;
+    document.getElementById('pageCrumb').textContent=meta.groupName;
   }
   window.scrollTo({top:0,behavior:'smooth'});
   Object.values(charts).forEach(c=>c&&c.resize());
@@ -698,7 +711,7 @@ function syncRegionTab(){
   const off = state.who==='dianbo';
   tab.classList.toggle('disabled', off);
   tab.title = off ? '阿留分区仅统计阿留，业务线切到店播时不可用' : '';
-  if(off && curPage==='region') showPage('overview');
+  if(off && curPage==='region') showPage('groups');
 }
 document.getElementById('tabs').addEventListener('click',e=>{
   const tab=e.target.closest('.tab');
@@ -706,10 +719,16 @@ document.getElementById('tabs').addEventListener('click',e=>{
   if(tab.classList.contains('disabled')) return;
   showPage(tab.dataset.page);
 });
+/* 侧边栏：只有四个大组，点组进该组默认页 */
+document.getElementById('navGroups').addEventListener('click',e=>{
+  const b=e.target.closest('.nav-item');
+  if(!b || !b.dataset.group) return;
+  showPage(groupEntry(b.dataset.group));
+});
 /* 支持 #rank/#channel 等锚点直达对应页面 */
 window.addEventListener('load',()=>{
   const h=(location.hash||'').replace('#','');
-  if(PAGE_META[h]&&h!==curPage) showPage(h);
+  showPage(PAGE_META[h]?h:curPage);
 });
 
 /* ================= KPI ================= */
