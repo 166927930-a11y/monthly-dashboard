@@ -280,6 +280,10 @@
   .mom-sort{cursor:pointer}
   .mom-sort:hover{background:var(--primary-50);color:var(--primary)}
   .mom-on{background:#dbe4f7 !important;color:#2f3f63 !important}
+  /* 趋势筛选：涨红 / 跌绿 / 持平灰 */
+  .mom-trend-tabs .subtab[data-mom-trend="up"].active{background:#b3261e;box-shadow:0 3px 10px rgba(179,38,30,.28)}
+  .mom-trend-tabs .subtab[data-mom-trend="down"].active{background:#0a7a54;box-shadow:0 3px 10px rgba(10,122,84,.28)}
+  .mom-trend-tabs .subtab[data-mom-trend="flat"].active{background:#5c6b82;box-shadow:0 3px 10px rgba(92,107,130,.25)}
   /* 环比趋势图 */
   .mom-charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);gap:14px;margin:2px 0 14px}
   .mom-chart-card{padding:13px 16px 4px}
@@ -522,6 +526,12 @@
       <div class="subtabs" id="momDimSubtabs">
         <button class="subtab active" data-mom-dim="emp">员工</button>
         <button class="subtab" data-mom-dim="group">小组</button>
+      </div>
+      <div class="subtabs mom-trend-tabs" id="momTrendSubtabs" title="按所选窗口内的整体走向筛选">
+        <button class="subtab active" data-mom-trend="all">全部</button>
+        <button class="subtab" data-mom-trend="up">↗ 增长</button>
+        <button class="subtab" data-mom-trend="flat">→ 持平</button>
+        <button class="subtab" data-mom-trend="down">↘ 下滑</button>
       </div>
       <div class="rank-ctl">
         <span>指标</span>
@@ -871,6 +881,13 @@ window.addEventListener('load',()=>{
       if(MOM_METRICS[p.get('mode')]){ MOM.mode=p.get('mode'); MOM.metric=(MOM_METRICS[MOM.mode][0]||{}).k; fillMomMetrics(); }
       if(p.get('m')&&MOM_METRICS[MOM.mode].some(x=>x.k===p.get('m'))){ MOM.metric=p.get('m'); fillMomMetrics(); }
       if(p.get('dim')==='emp'||p.get('dim')==='group') MOM.dim=p.get('dim');
+      if(p.get('trend')){
+        MOM.trend=new Set(p.get('trend').split(',').filter(t=>['up','flat','down'].includes(t)));
+        [...document.querySelectorAll('#momTrendSubtabs .subtab')].forEach(x=>{
+          const k=x.dataset.momTrend;
+          x.classList.toggle('active', k==='all' ? MOM.trend.size===0 : MOM.trend.has(k));
+        });
+      }
       if([3,4,6].includes(parseInt(p.get('span'),10))){ MOM.span=parseInt(p.get('span'),10); const sp=document.getElementById('momSpan'); if(sp) sp.value=String(MOM.span); }
       renderMom();
       [...document.querySelectorAll('#momModeSubtabs .subtab')].forEach(x=>x.classList.toggle('active',x.dataset.momMode===MOM.mode));
@@ -1935,7 +1952,7 @@ exportMenu.addEventListener('click',e=>{
 
 /* ================= 总渲染 ================= */
 /* ================= 环比追踪（员工 / 小组 · 成交 / 过程） ================= */
-const MOM={mode:'deal',dim:'emp',metric:'实际GMV',span:4,kw:'',sortIdx:-1};
+const MOM={mode:'deal',dim:'emp',metric:'实际GMV',span:4,kw:'',sortIdx:-1,trend:new Set()};
 const MOM_METRICS={
   deal:[
     {k:'实际GMV',label:'实际GMV',kind:'money'},
@@ -2137,6 +2154,14 @@ function drawMomCharts(w,rows,periods,def){
     });
   }
 }
+/* 走向：与「区间变化」同口径——窗口内首个有数据期 → 最新有数据期 */
+function momTrendOf(vals,kind){
+  let fv=null,lv=null,n=0;
+  vals.forEach(v=>{ if(v!=null){ if(fv==null) fv=v; lv=v; n++; } });
+  if(n<2) return 'na';
+  const d=momDelta(lv,fv,kind);
+  return d.cls==='up'?'up':d.cls==='down'?'down':d.cls==='flat'?'flat':'na';
+}
 function renderMom(){
   const box=document.getElementById('momSections');
   if(!box) return;
@@ -2153,10 +2178,13 @@ function renderMom(){
     const agg=momAgg(w,periods);
     let objs=Object.values(agg);
     if(MOM.kw) objs=objs.filter(o=>(o.name||'').includes(MOM.kw)||(o.group||'').includes(MOM.kw));
-    const rows=objs.map(o=>({name:o.name,group:o.group,bucket:o.per,vals:periods.map(q=>momValue(o.per[q],def.k))}));
+    let rows=objs.map(o=>({name:o.name,group:o.group,bucket:o.per,vals:periods.map(q=>momValue(o.per[q],def.k))}));
     const title=`${WHO_NAME[w]} · ${MOM.dim==='emp'?'员工':'小组'}${MOM.mode==='deal'?'成交':'过程'}环比`;
+    /* 趋势筛选：增长 / 持平 / 下滑（可多选，基于当前指标与窗口） */
+    if(MOM.trend.size) rows=rows.filter(r=>MOM.trend.has(momTrendOf(r.vals,def.kind)));
+    const trendTxt=MOM.trend.size?`〔${[...MOM.trend].map(t=>t==='up'?'增长':t==='down'?'下滑':'持平').join(' + ')}〕`:'';
     if(!rows.length){
-      html+=`<div class="sec-title">${title}</div><div class="empty-tip">当前筛选条件下没有数据</div>`;
+      html+=`<div class="sec-title">${title}${trendTxt}</div><div class="empty-tip">当前筛选条件下没有数据</div>`;
       return;
     }
     const idx=(MOM.sortIdx>=0&&MOM.sortIdx<periods.length)?MOM.sortIdx:periods.length-1;
@@ -2182,7 +2210,7 @@ function renderMom(){
         (MOM.dim==='emp'?`<td>${r.group||'—'}</td>`:'')+
         cells+`<td class="mom-td mom-span"><span class="mom-d ${tot.cls}">${tot.txt}</span></td></tr>`;
     }).join('');
-    html+=`<div class="sec-title">${title}（${periods[0]} → ${periods[periods.length-1]} · 按${def.label}）</div>`+
+    html+=`<div class="sec-title">${title}${trendTxt}（${periods[0]} → ${periods[periods.length-1]} · 按${def.label} · 共 ${rows.length} 个）</div>`+
       momChartHtml(w,def)+
       `<div class="tbl-scroll"><table class="mom-table"><thead><tr>
       <th>排名</th><th>${MOM.dim==='emp'?'姓名':'小组'}</th>${MOM.dim==='emp'?'<th>小组</th>':''}${head}<th>区间变化</th>
@@ -2215,6 +2243,20 @@ function bindMom(){
     [...dimBox.children].forEach(x=>x.classList.toggle('active',x===b));
     renderMom();
   });
+  const trendBox=document.getElementById('momTrendSubtabs');
+  if(trendBox){
+    trendBox.addEventListener('click',e=>{
+      const b=e.target.closest('[data-mom-trend]'); if(!b) return;
+      const t=b.dataset.momTrend;
+      if(t==='all') MOM.trend.clear();
+      else { MOM.trend.has(t)?MOM.trend.delete(t):MOM.trend.add(t); }
+      [...trendBox.children].forEach(x=>{
+        const k=x.dataset.momTrend;
+        x.classList.toggle('active', k==='all' ? MOM.trend.size===0 : MOM.trend.has(k));
+      });
+      MOM.sortIdx=-1; renderMom();
+    });
+  }
   document.getElementById('momMetric').addEventListener('change',e=>{ MOM.metric=e.target.value; renderMom(); });
   document.getElementById('momSpan').addEventListener('change',e=>{ MOM.span=parseInt(e.target.value,10)||4; renderMom(); });
   document.getElementById('momSearch').addEventListener('input',e=>{ MOM.kw=e.target.value.trim(); renderMom(); });
