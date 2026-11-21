@@ -280,6 +280,13 @@
   .mom-sort{cursor:pointer}
   .mom-sort:hover{background:var(--primary-50);color:var(--primary)}
   .mom-on{background:#dbe4f7 !important;color:#2f3f63 !important}
+  /* 环比趋势图 */
+  .mom-charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.45fr);gap:14px;margin:2px 0 14px}
+  .mom-chart-card{padding:13px 16px 4px}
+  .mom-chart-head{display:flex;align-items:baseline;gap:8px;margin-bottom:-2px}
+  .mom-chart-head span{font-size:13px;font-weight:600;color:var(--ink)}
+  .mom-chart-head em{font-size:11px;font-style:normal;color:var(--muted);font-weight:400}
+  @media (max-width:1180px){.mom-charts{grid-template-columns:minmax(0,1fr)}}
   .mom-td{min-width:88px}
   .mom-v{display:block;font-weight:600;color:var(--ink);font-size:12.5px;
     font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;letter-spacing:-.01em}
@@ -2028,17 +2035,125 @@ function momDelta(cur,prev,kind){
   if(Math.abs(d)<0.05) return {txt:'0.0%',cls:'flat'};
   return {txt:(d>0?'+':'')+d.toFixed(1)+'%',cls:d>0?'up':'down'};
 }
+/* 环比趋势图：左=筛选范围整体走势，右=Top 对象多线对比 */
+const MOM_PALETTE=['#4f46e5','#0d9488','#d97706','#be123c','#7c3aed','#0284c7','#65a30d','#db2777','#475569','#b45309'];
+function momChartHtml(w,def){
+  return `<div class="mom-charts">
+    <div class="card mom-chart-card">
+      <div class="mom-chart-head"><span>整体趋势</span><em>当前筛选范围合计 / 加权 · ${def.label}</em></div>
+      <div class="chart" id="momAgg-${w}" style="height:238px"></div>
+    </div>
+    <div class="card mom-chart-card">
+      <div class="mom-chart-head"><span>${MOM.dim==='emp'?'Top 员工趋势':'各小组趋势'}</span><em>按最新期 ${def.label} 排序</em></div>
+      <div class="chart" id="momTop-${w}" style="height:238px"></div>
+    </div>
+  </div>`;
+}
+function momAxisLabel(kind){
+  return v=>{
+    if(kind==='money'){ if(Math.abs(v)<1e4) return String(Math.round(v)); const w=Math.round(v/1e4*10)/10; return (w%1?w.toFixed(1):String(w))+'万'; }
+    if(kind==='pct') return (Math.round(v*100)/100)+'%';
+    return Math.abs(v)>=1e4?(v/1e4).toFixed(1)+'万':String(Math.round(v));
+  };
+}
+function momDeltaColor(d){
+  return d.cls==='up'?'#c92a2a':d.cls==='down'?'#0d8a5f':'#7b8aa3';
+}
+function drawMomCharts(w,rows,periods,def){
+  /* ---- 整体：把筛选范围内的计数逐期相加，率类再按分子/分母重算 ---- */
+  const aggVals=periods.map(q=>{
+    const t={L:0,O:0,R:0,GMV:0,CG:0,WX:0,BK:0,D1:0,D1C:0,Q:0,ZD:0};
+    rows.forEach(o=>{
+      const b=o.bucket&&o.bucket[q]; if(!b) return;
+      for(const k in t) t[k]+=b[k]||0;
+    });
+    return momValue(t,def.k);
+  });
+  const elA=document.getElementById('momAgg-'+w);
+  if(elA){
+    const c=charts['momAgg-'+w]=echarts.init(elA);
+    c.setOption({
+      grid:{left:4,right:64,top:22,bottom:4,containLabel:true},
+      tooltip:Object.assign({trigger:'axis',axisPointer:{type:'line',lineStyle:{color:'#a5b4fc',type:'dashed'}},
+        formatter:ps=>{
+          const i=ps[0].dataIndex, v=ps[0].value;
+          let prev=null;
+          for(let j=i-1;j>=0;j--){ if(aggVals[j]!=null){ prev=aggVals[j]; break; } }
+          const d=momDelta(v,prev,def.kind);
+          return `<b>${periods[i]}</b><br/>整体 ${def.label}：<b>${momFmt(v,def.kind)}</b> &nbsp;<span style="color:${momDeltaColor(d)};font-weight:600">${d.txt}</span>`;
+        }},TT),
+      xAxis:Object.assign({type:'category',boundaryGap:false,data:periods},AX),
+      yAxis:{type:'value',scale:true,axisLabel:Object.assign({color:'#5a6b85',formatter:momAxisLabel(def.kind)}),
+        splitLine:GRID_S,axisLine:{show:false},nameTextStyle:{color:'#5a6b85'}},
+      series:[{
+        name:'整体',type:'line',smooth:true,symbol:'circle',symbolSize:7,connectNulls:true,
+        data:aggVals,
+        lineStyle:{width:2.6,color:'#4f46e5',shadowBlur:10,shadowColor:'rgba(79,70,229,.22)'},
+        itemStyle:{color:'#4f46e5',borderColor:'#fff',borderWidth:2},
+        areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[
+          {offset:0,color:'rgba(79,70,229,.24)'},{offset:1,color:'rgba(79,70,229,.02)'}])},
+        endLabel:{show:true,distance:6,color:'#4338ca',fontSize:11,fontWeight:600,
+          formatter:p=>momFmt(p.value,def.kind)}
+      }]
+    });
+  }
+
+  /* ---- 右侧：Top 对象（员工取前 6，小组全展示） ---- */
+  const elT=document.getElementById('momTop-'+w);
+  if(elT){
+    const n=MOM.dim==='emp'?6:Math.min(rows.length,10);
+    const top=rows.slice(0,n);
+    const series=top.map((r,i)=>({
+      name:r.name||'—',
+      type:'line',smooth:true,symbol:'circle',symbolSize:5,connectNulls:true,
+      data:r.vals,
+      lineStyle:{width:i===0?2.6:1.8,color:MOM_PALETTE[i%MOM_PALETTE.length],opacity:i===0?1:.92},
+      itemStyle:{color:MOM_PALETTE[i%MOM_PALETTE.length],borderColor:'#fff',borderWidth:1.5},
+      emphasis:{focus:'series'}
+    }));
+    const c=charts['momTop-'+w]=echarts.init(elT);
+    c.setOption({
+      color:MOM_PALETTE,
+      grid:{left:4,right:52,top:44,bottom:4,containLabel:true},
+      legend:{top:2,left:0,type:'scroll',itemWidth:10,itemHeight:10,itemGap:12,
+        textStyle:{fontSize:11,color:'#5a6b85'},pageIconColor:'#4f46e5',pageTextStyle:{color:'#5a6b85'}},
+      tooltip:Object.assign({trigger:'axis',axisPointer:{type:'line',lineStyle:{color:'#a5b4fc',type:'dashed'}},
+        formatter:ps=>{
+          const i=ps[0].dataIndex;
+          const lines=ps.map(p=>{
+            const v=p.value; if(v==null) return '';
+            let prev=null;
+            const s=top.find(t=>t.name===p.seriesName);
+            if(s){ for(let j=i-1;j>=0;j--){ if(s.vals[j]!=null){ prev=s.vals[j]; break; } } }
+            const d=momDelta(v,prev,def.kind);
+            return `${p.marker}${p.seriesName}：<b>${momFmt(v,def.kind)}</b> <span style="color:${momDeltaColor(d)};font-weight:600">${d.txt}</span>`;
+          }).filter(Boolean);
+          return `<b>${periods[i]}</b><br/>`+lines.join('<br/>');
+        }},TT),
+      xAxis:Object.assign({type:'category',boundaryGap:false,data:periods},AX),
+      yAxis:{type:'value',scale:true,splitLine:GRID_S,axisLine:{show:false},
+        axisLabel:{color:'#5a6b85',formatter:momAxisLabel(def.kind)}},
+      series
+    });
+  }
+}
 function renderMom(){
   const box=document.getElementById('momSections');
   if(!box) return;
+  /* 重建前销毁旧图表实例，避免容器移除后泄漏 */
+  Object.keys(charts).forEach(k=>{
+    if(k.indexOf('mom')===0){ try{ charts[k].dispose(); }catch(e){} delete charts[k]; }
+  });
   const def=momMetricDef();
   const periods=momPeriods();
   if(!periods.length){ box.innerHTML='<div class="empty-tip">暂无期次数据</div>'; return; }
+  const queue=[];
   let html='';
   (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
     const agg=momAgg(w,periods);
-    let rows=Object.values(agg).map(o=>({name:o.name,group:o.group,vals:periods.map(q=>momValue(o.per[q],def.k))}));
-    if(MOM.kw) rows=rows.filter(r=>(r.name||'').includes(MOM.kw)||(r.group||'').includes(MOM.kw));
+    let objs=Object.values(agg);
+    if(MOM.kw) objs=objs.filter(o=>(o.name||'').includes(MOM.kw)||(o.group||'').includes(MOM.kw));
+    const rows=objs.map(o=>({name:o.name,group:o.group,bucket:o.per,vals:periods.map(q=>momValue(o.per[q],def.k))}));
     const title=`${WHO_NAME[w]} · ${MOM.dim==='emp'?'员工':'小组'}${MOM.mode==='deal'?'成交':'过程'}环比`;
     if(!rows.length){
       html+=`<div class="sec-title">${title}</div><div class="empty-tip">当前筛选条件下没有数据</div>`;
@@ -2067,12 +2182,21 @@ function renderMom(){
         (MOM.dim==='emp'?`<td>${r.group||'—'}</td>`:'')+
         cells+`<td class="mom-td mom-span"><span class="mom-d ${tot.cls}">${tot.txt}</span></td></tr>`;
     }).join('');
-    html+=`<div class="sec-title">${title}（${periods[0]} → ${periods[periods.length-1]} · 按${def.label}）</div>
-      <div class="tbl-scroll"><table class="mom-table"><thead><tr>
+    html+=`<div class="sec-title">${title}（${periods[0]} → ${periods[periods.length-1]} · 按${def.label}）</div>`+
+      momChartHtml(w,def)+
+      `<div class="tbl-scroll"><table class="mom-table"><thead><tr>
       <th>排名</th><th>${MOM.dim==='emp'?'姓名':'小组'}</th>${MOM.dim==='emp'?'<th>小组</th>':''}${head}<th>区间变化</th>
       </tr></thead><tbody>${body}</tbody></table></div>`;
+    queue.push({w,rows,periods,def});
   });
   box.innerHTML=html;
+  queue.forEach(q=>drawMomCharts(q.w,q.rows,q.periods,q.def));
+  /* 页面隐藏时初始化宽度为 0，显示后补一次 resize */
+  setTimeout(()=>{
+    queue.forEach(q=>{
+      ['momAgg-'+q.w,'momTop-'+q.w].forEach(k=>{ if(charts[k]) charts[k].resize(); });
+    });
+  },80);
 }
 /* 环比页交互 */
 function bindMom(){
