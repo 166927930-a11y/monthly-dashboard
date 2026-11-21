@@ -333,7 +333,7 @@
       </div>
       <input class="search" id="rankSearch" style="margin-left:0" placeholder="搜索姓名 / 小组…">
     </div>
-    <div class="rank-tip" id="rankQiTip"><b>销管口径</b>：名次默认按<b>实际转化率</b>（有效订单 ÷ 线索）从高到低排列，并列时以实际GMV靠前者优先；也可切换排序指标或点表头重排。<b>两种范围</b>：不选期次时显示<b>月度累计排名</b>；选择期次后自动切换为<b>该期员工排名</b>（数据源：转化小组引用表）。<b>名次与 🥇🥈🥉 跟随当前排序指标</b>。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
+    <div class="rank-tip" id="rankQiTip"><b>销管口径</b>：名次默认按<b>实际转化率</b>（有效订单 ÷ 线索）从高到低排列，并列时以实际GMV靠前者优先；也可切换排序指标或点表头重排，🥇🥈🥉 与第一名卡片都按实际转化率评选。<b>两种范围</b>：不选期次时显示<b>月度累计排名</b>；选择期次后显示<b>所选期次排名</b>，<b>多选期次时按所选期次的合计数据统一排名</b>，不再每期各排一次（数据源：转化小组引用表）。注：「销售期次 / 平均单期GMV / 追单GMV」三列仅月度排名提供。</div>
     <div class="champ-grid" id="rankChamps"></div>
     <div id="rankSections"></div>
   </div>
@@ -923,6 +923,46 @@ function cmpRank(a,b,sf,dir){
   const ga=num(a['实际GMV']),gb=num(b['实际GMV']);
   return rankSort.dir==='desc'?gb-ga:ga-gb;
 }
+/* 第一名卡片：按实际转化率评选（并列时看实际GMV），与排名口径一致 */
+function champOf(rows){
+  return rows.reduce((a,b)=>{
+    const ca=num(a['实际转化率']),cb=num(b['实际转化率']);
+    if(ca!==cb) return cb>ca?b:a;
+    return num(b['实际GMV'])>num(a['实际GMV'])?b:a;
+  });
+}
+/* 期次模式：把所选期次（可多选）按员工合计成一行，用于合计排名与导出 */
+function aggQiRows(w,qsel,kw){
+  const src=(D.rankByQi[w]&&D.rankByQi[w].rows)||[];
+  const map={},order=[];
+  src.forEach(r=>{
+    if(!qsel.includes(r['期次']))return;
+    if(!state.groups.has(r['小组']))return;
+    if(kw&&!(r['姓名']||'').includes(kw)&&!(r['小组']||'').includes(kw))return;
+    const k=(r['姓名']||'')+'|'+(r['小组']||'');
+    if(!map[k]){
+      map[k]={姓名:r['姓名']||'',小组:r['小组']||'',_qis:new Set(),
+        线索量:0,订单量:0,退款订单量:0,'成交GMV(含退款)':0,退款金额:0,'实际GMV':0,追单订单量:0};
+      order.push(k);
+    }
+    const m=map[k];
+    m._qis.add(r['期次']);
+    m.线索量+=num(r['线索量']); m.订单量+=num(r['订单量']); m.退款订单量+=num(r['退款订单量']);
+    m['成交GMV(含退款)']+=num(r['成交GMV(含退款)']); m.退款金额+=num(r['退款金额']); m['实际GMV']+=num(r['实际GMV']);
+    /* 源表只给追单率（追单订单量/线索量），合计时按率还原为追单订单量再累加 */
+    m.追单订单量+=num(r['追单订单量'])||num(r['追单率'])*num(r['线索量'])/100;
+  });
+  return order.map(k=>{
+    const m=map[k],L=m.线索量,O=m.订单量,R=m.退款订单量;
+    const qis=[...m._qis].sort((a,b)=>parseInt(a)-parseInt(b));
+    return {...m,
+      销售期次:qis.join('+'),
+      退款率:(O>0?R/O*100:0).toFixed(2)+'%',
+      实际转化率:(L>0?(O-R)/L*100:0).toFixed(2)+'%',
+      追单率:(L>0?m.追单订单量/L*100:0).toFixed(2)+'%',
+      平均单期GMV:m._qis.size>1?m['实际GMV']/m._qis.size:m['实际GMV']};
+  });
+}
 function rankTableHtml(cols,rows,sortable){
   sortable=sortable||RANK_SORTABLE;
   if(!rows.length) return '<div class="tbl-scroll"><table><tbody><tr><td colspan="'+cols.length+'" class="empty-tip">当前筛选条件下没有数据</td></tr></tbody></table></div>';
@@ -948,23 +988,21 @@ function renderRank(){
   const qiActive=qsel.length!==allQis.length;
   const filt=d=>(d&&d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)));
   let html='',shown=0,total=0;
-  const champs=[];  /* 销冠：各业务线在当前筛选内按主指标成交GMV(含退款)的第 1 名 */
+  const champs=[];  /* 第一名卡片：各业务线在当前筛选内按实际转化率的第 1 名 */
   (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
     if(qiActive&&D.rankByQi&&D.rankByQi[w]){
-      /* ---- 期次明细模式：显示所选期次内每个员工的当期数据与动态名次 ---- */
-      const src=D.rankByQi[w].rows;
-      total+=src.length;
-      qsel.forEach(qi=>{
-        const rows=src.filter(r=>r['期次']===qi&&state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
-        if(!rows.length) return;
-        shown+=rows.length;
-        /* 名次与金银铜牌跟随当前排序指标：先按排序字段排好，再依次赋予 1..N */
-        const sf=rows[0]&&(rankSort.field in rows[0])?rankSort.field:RANK_PRIMARY;
+      /* ---- 期次模式：所选期次（含多选）按员工合计成一行，统一排名 ---- */
+      const rows=aggQiRows(w,qsel,kw);
+      total+=((D.rankByQi[w]&&D.rankByQi[w].rows)||[]).length;
+      shown+=rows.length;
+      if(rows.length){
+        const sf=rankSort.field in rows[0]?rankSort.field:RANK_PRIMARY;
         rows.sort((a,b)=>cmpRank(a,b,sf,rankSort.dir));
         rows.forEach((r,i)=>{r._rank=i+1;});
-        html+=`<div class="sec-title">${WHO_NAME[w]} · ${qi} 员工排名（${rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
-        champs.push({w,r:rows.reduce((a,b)=>num(b[RANK_PRIMARY])>num(a[RANK_PRIMARY])?b:a),scope:qi});
-      });
+        const scopeTxt=qsel.length>1?qsel.join('+')+' 合计':qsel.join('');
+        html+=`<div class="sec-title">${WHO_NAME[w]} · ${scopeTxt} 员工排名（${rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}${qsel.length>1?' · 多期次合计':''}）</div>`+rankTableHtml(PERIOD_RANK_COLS,rows,PERIOD_SORTABLE);
+        champs.push({w,r:champOf(rows),scope:scopeTxt});
+      }
     }else{
       /* ---- 月度累计模式（不选期次时） ---- */
       const d=D.rank[w]||{rows:[]};
@@ -975,25 +1013,25 @@ function renderRank(){
       rows.sort((a,b)=>cmpRank(a,b,sf,rankSort.dir));
       rows.forEach((r,i)=>{r._rank=i+1;});
       html+=`<div class="sec-title">${WHO_NAME[w]}员工排名（${rows.length}/${d.rows.length} 人 · 名次按「${sf}」${rankSort.dir==='desc'?'降序':'升序'}）</div>`+rankTableHtml(RANK_COLS,rows,RANK_SORTABLE);
-      if(rows.length) champs.push({w,r:rows.reduce((a,b)=>num(b[RANK_PRIMARY])>num(a[RANK_PRIMARY])?b:a),scope:'月度累计'});
+      if(rows.length) champs.push({w,r:champOf(rows),scope:'月度累计'});
     }
   });
   const champHtml=champs.length?`<div class="champ-grid">${champs.map(c=>`
     <div class="champ">
-      <div class="c-tag">${WHO_NAME[c.w]} 销冠 · ${c.scope} · 按成交GMV</div>
+      <div class="c-tag">${WHO_NAME[c.w]} · ${c.scope} · 实际转化率第一</div>
       <div class="c-name">🥇 ${c.r['姓名']||'—'}<span class="c-group">${normGroup(c.r['小组'])||'—'}</span></div>
       <div class="c-stats">
+        <span>实际转化率<b>${pctTxt(c.r['实际转化率'])}</b></span>
         <span>成交GMV<b>${fmtMoney(num(c.r[RANK_PRIMARY]))}</b></span>
         <span>实际GMV<b>${fmtMoney(num(c.r['实际GMV']))}</b></span>
         <span>线索<b>${num(c.r['线索量']).toLocaleString('zh-CN')}</b></span>
         <span>订单<b>${num(c.r['订单量']).toLocaleString('zh-CN')}</b></span>
-        <span>实际转化率<b>${pctTxt(c.r['实际转化率'])}</b></span>
       </div>
     </div>`).join('')}</div>`:'';
   document.getElementById('rankChamps').innerHTML=champHtml;
   document.getElementById('rankSections').innerHTML=html||'<div class="empty-tip" style="padding:24px;text-align:center;color:var(--sub)">没有匹配的期次明细数据</div>';
   document.getElementById('rankCount').textContent=qiActive
-    ?`已选期次 ${qsel.join(' / ')} · 筛选后共 ${shown} 条（原始 ${total} 条）`
+    ?`已选期次 ${qsel.join(' / ')}${qsel.length>1?'（多期次按合计排名）':''} · 排名 ${shown} 人`
     :`筛选后共 ${shown} 人（原始 ${total} 人）`;
 }
 const rankSortSel=document.getElementById('rankSortSel');
@@ -1515,11 +1553,10 @@ function rankExportData(){
   };
   (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
     if(qiActive&&D.rankByQi&&D.rankByQi[w]){
-      const src=D.rankByQi[w].rows||[];
-      qsel.forEach(qi=>{
-        const list=src.filter(r=>r['期次']===qi&&state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
-        if(list.length) push(w,qi,list);
-      });
+      /* 与页面一致：多期次按合计排名导出 */
+      const label=qsel.length>1?qsel.join('+')+' 合计':qsel.join('');
+      const list=aggQiRows(w,qsel,kw);
+      if(list.length) push(w,label,list);
     }else{
       const d=D.rank[w]||{rows:[]};
       const list=(d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
