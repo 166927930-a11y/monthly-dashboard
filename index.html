@@ -200,6 +200,31 @@
   .foot a{color:var(--primary);text-decoration:none}
   .foot a:hover{text-decoration:underline}
   .empty-tip{padding:34px;text-align:center;color:var(--sub)}
+  /* ---------- 导出 ---------- */
+  .export-wrap{position:relative}
+  .btn-export{display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:10px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+    transition:all .18s ease;box-shadow:var(--shadow-sm)}
+  .btn-export:hover{border-color:#b9c5ff;color:var(--primary);background:#f6f8ff}
+  .btn-export.on{border-color:#b9c5ff;color:var(--primary);background:#eef1ff}
+  .btn-export .caret{font-size:10px;color:var(--sub)}
+  .btn-export.on .caret{color:var(--primary)}
+  .export-menu{position:absolute;right:0;top:calc(100% + 8px);min-width:262px;background:#fff;border:1px solid var(--line);
+    border-radius:14px;box-shadow:var(--shadow-md);padding:8px;z-index:60;display:none}
+  .export-menu.show{display:block;animation:fadeUp .18s ease both}
+  .export-menu-head{font-size:11.5px;color:var(--sub);padding:5px 10px 9px;border-bottom:1px dashed var(--line-soft);margin-bottom:6px;line-height:1.5}
+  .export-menu-head b{color:var(--primary);font-weight:700}
+  .export-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:9px 10px;
+    border:none;background:none;border-radius:9px;color:var(--ink);font-size:13px;font-weight:500;cursor:pointer;
+    text-align:left;font-family:inherit;transition:all .15s ease}
+  .export-item:hover{background:#f4f7ff;color:var(--primary)}
+  .export-item span{font-size:10.5px;color:var(--sub);font-weight:700;letter-spacing:.4px;background:#f2f4fa;border-radius:5px;padding:2px 6px}
+  .export-item:hover span{background:#e6ebff;color:var(--primary)}
+  .export-sep{height:1px;background:var(--line-soft);margin:6px 4px}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(14px);opacity:0;pointer-events:none;
+    background:#171c26;color:#fff;padding:10px 20px;border-radius:11px;font-size:13px;font-weight:500;z-index:99;
+    transition:all .25s ease;box-shadow:0 10px 30px rgba(23,28,38,.25)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   @media (max-width:760px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.tabs{width:100%;margin-left:0}.wrap{padding:14px 16px 50px}.topbar-inner{padding:12px 16px}}
 </style>
 </head>
@@ -208,6 +233,19 @@
   <div class="topbar-inner">
     <h1>📊 月度经营看板</h1>
     <span class="meta"><span class="dot"></span>数据更新于 <b id="updated">—</b> · 每小时自动同步飞书表格</span>
+    <div class="export-wrap" id="exportWrap">
+      <button class="btn-export" id="exportBtn" title="导出当前筛选结果">⤓ 导出 <span class="caret">▾</span></button>
+      <div class="export-menu" id="exportMenu">
+        <div class="export-menu-head">导出<b>当前筛选</b>结果 · <span id="exportFilterTxt">—</span></div>
+        <button class="export-item" data-exp="qi">期次明细 <span>CSV</span></button>
+        <button class="export-item" data-exp="group">小组明细 <span>CSV</span></button>
+        <button class="export-item" data-exp="rank">员工排名 <span>CSV</span></button>
+        <button class="export-item" data-exp="channel">渠道转化 <span>CSV</span></button>
+        <button class="export-item" data-exp="process">过程数据 <span>CSV</span></button>
+        <div class="export-sep"></div>
+        <button class="export-item" data-exp="xlsx">全部数据（Excel 多工作表） <span>XLSX</span></button>
+      </div>
+    </div>
     <div class="tabs" id="tabs">
       <button class="tab active" data-page="overview">总览</button>
       <button class="tab" data-page="groups">小组对比</button>
@@ -697,10 +735,9 @@ function qiVal(m,f){
   }
   return null;
 }
-function renderQiTable(){
-  const rows=activeRows();
+function qiAgg(){
   const map={};
-  rows.forEach(r=>{
+  activeRows().forEach(r=>{
     const k=r['期次']+'|'+r._who;
     if(!map[k]) map[k]={qi:r['期次'],who:r._who,gmv:0,realGmv:0,goal:0,leads:0,orders:0,refunds:0};
     const m=map[k];
@@ -708,7 +745,10 @@ function renderQiTable(){
     m.leads+=num(r['线索量']); m.orders+=num(r['订单量']); m.refunds+=num(r['退款订单量']);
     const g=num(r['目标GMV']); if(g>0)m.goal+=g;
   });
-  const arr=applySort(Object.values(map).sort((a,b)=>a.qi.localeCompare(b.qi,undefined,{numeric:true})||a.who.localeCompare(b.who)),qiSort,qiVal);
+  return Object.values(map).sort((a,b)=>a.qi.localeCompare(b.qi,undefined,{numeric:true})||a.who.localeCompare(b.who));
+}
+function renderQiTable(){
+  const arr=applySort(qiAgg(),qiSort,qiVal);
   const el=document.getElementById('qiTable');
   if(!arr.length){ el.innerHTML='<tbody><tr><td class="empty-tip">当前筛选条件下没有数据</td></tr></tbody>'; return; }
   const t={leads:0,orders:0,gmv:0,realGmv:0,goal:0,refunds:0};
@@ -1361,6 +1401,208 @@ document.getElementById('chanSearch').addEventListener('input',renderChannel);
 document.getElementById('chanTable').addEventListener('click',e=>{
   const th=e.target.closest('th[data-cs]'); if(!th)return;
   toggleSort(chanSort,th.dataset.cs); renderChannel();
+});
+
+/* ================= 数据导出 ================= */
+const EXP_WHO=w=>w==='aliu'?'阿留':'店播';
+const RANK_EXPORT_HEADER=['归属','口径/期次','排名','姓名','小组','成交GMV(含退款)','线索量','订单量','退款率','实际转化率','实际GMV','销售期次','平均单期GMV','追单率','追单GMV'];
+function round2(v){ return (v==null||!isFinite(v))?'':Math.round(v*100)/100; }
+function pad2(n){ return String(n).padStart(2,'0'); }
+function stampTxt(){ const d=new Date(); return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}`; }
+function filterText(){
+  const who=state.who==='all'?'全部业务线':EXP_WHO(state.who);
+  const qis=[...state.qis].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  const q=qis.length===allQis.length?'全部期次':(qis.length?qis.join('/'):'无期次');
+  const g=state.groups.size===allGroups.length?'全部小组':(state.groups.size?state.groups.size+' 个小组':'无小组');
+  return `${who} · ${q} · ${g}`;
+}
+
+/* ---- 各数据集构建（口径与页面一致，均受当前筛选影响） ---- */
+function expOverview(){
+  const rows=activeRows(), whos=activeWhos();
+  const header=['指标','合计',...whos.map(w=>WHO_NAME[w])];
+  const defs=[['实际GMV','实际GMV'],['成交GMV(含退款)','成交GMV含退款'],['目标GMV','目标GMV'],['线索量','线索量'],
+    ['订单量','订单量'],['退款订单量','退款订单量'],['实际转化率(%)','转化率'],['退款率(%)','退款率'],['GMV完成率(%)','完成率']];
+  const blocks={all:aggRows(rows)}; whos.forEach(w=>{blocks[w]=aggRows(rows.filter(r=>r._who===w));});
+  const out=[['统计口径',filterText()],['数据更新时间',D.updated_at],['明细行数',rows.length]];
+  defs.forEach(([label,key])=>{
+    const line=[label,blocks.all[key]==null?'':round2(blocks.all[key])];
+    whos.forEach(w=>line.push(blocks[w][key]==null?'':round2(blocks[w][key])));
+    out.push(line);
+  });
+  /* 统一列数：信息行不足的补空列，保证 CSV / Excel 对齐 */
+  out.forEach(r=>{ if(r.length) while(r.length<header.length) r.push(''); });
+  return {name:'概览',header,rows:out};
+}
+function expQi(){
+  const arr=applySort(qiAgg(),qiSort,qiVal);
+  const header=['期次','归属','线索量','订单量','实际GMV','转化率(%)','成交GMV(含退款)','退款率(%)','目标GMV','完成率(%)'];
+  const rows=arr.map(m=>[m.qi,EXP_WHO(m.who),m.leads,m.orders,round2(m.realGmv),
+    m.leads?round2((m.orders-m.refunds)/m.leads*100):'',round2(m.gmv),
+    m.orders?round2(m.refunds/m.orders*100):'',m.goal>0?round2(m.goal):'',
+    m.goal>0?round2(m.realGmv/m.goal*100):'']);
+  if(arr.length){
+    const t=aggRows(activeRows());
+    rows.push(['合计','',t.线索量,t.订单量,round2(t.实际GMV),round2(t.转化率),round2(t.成交GMV含退款),round2(t.退款率),round2(t.目标GMV),t.完成率==null?'':round2(t.完成率)]);
+  }
+  return {name:'期次明细',header,rows};
+}
+function expGroup(){
+  const whos=activeWhos();
+  const all=groupAgg().filter(g=>whos.some(w=>WHO_NAME[w]===g.whoName));
+  const totalBy={};
+  all.forEach(g=>{totalBy[g.whoName]=(totalBy[g.whoName]||0)+g.gmv;});
+  const list=all.filter(g=>!groupKw||g.name.includes(groupKw)||g.label.includes(groupKw)||[...g.qis].some(q=>q.includes(groupKw)));
+  const sorted=applySort(list,groupSort,groupVal);
+  const header=['小组','归属','期次数','线索量','订单量','实际GMV','转化率(%)','成交GMV(含退款)','GMV占比(%)','目标GMV','完成率(%)'];
+  const rows=sorted.map(g=>[g.label,g.whoName,g.qis.size,g.leads,g.orders,round2(g.realGmv),round2(g.cvr),round2(g.gmv),
+    totalBy[g.whoName]>0?round2(g.gmv/totalBy[g.whoName]*100):'',g.goal>0?round2(g.goal):'',g.rate==null?'':round2(g.rate)]);
+  return {name:'小组明细',header,rows};
+}
+function expRankCell(r,k){
+  const v=r[k];
+  if(v==null||v==='') return '';
+  if(String(v).includes('%')) return String(v).trim();
+  return num(v);
+}
+function rankExportData(){
+  const kw=(document.getElementById('rankSearch').value||'').trim();
+  const qsel=[...state.qis].sort((a,b)=>parseInt(a)-parseInt(b));
+  const qiActive=qsel.length!==allQis.length;
+  const out=[];
+  const push=(w,label,list)=>{
+    const sf=list[0]&&(rankSort.field in list[0])?rankSort.field:RANK_PRIMARY;
+    list.sort((a,b)=>{const va=num(a[sf]),vb=num(b[sf]);return rankSort.dir==='desc'?vb-va:va-vb;});
+    list.forEach((r,i)=>out.push([EXP_WHO(w),label,i+1,r['姓名']||'',r['小组']||'',
+      expRankCell(r,'成交GMV(含退款)'),expRankCell(r,'线索量'),expRankCell(r,'订单量'),expRankCell(r,'退款率'),
+      expRankCell(r,'实际转化率'),expRankCell(r,'实际GMV'),r['销售期次']||'',
+      expRankCell(r,'平均单期GMV'),expRankCell(r,'追单率'),expRankCell(r,'追单GMV')]));
+  };
+  (state.who==='all'?['aliu','dianbo']:[state.who]).forEach(w=>{
+    if(qiActive&&D.rankByQi&&D.rankByQi[w]){
+      const src=D.rankByQi[w].rows||[];
+      qsel.forEach(qi=>{
+        const list=src.filter(r=>r['期次']===qi&&state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
+        if(list.length) push(w,qi,list);
+      });
+    }else{
+      const d=D.rank[w]||{rows:[]};
+      const list=(d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw))).map(r=>({...r}));
+      if(list.length) push(w,'月度累计',list);
+    }
+  });
+  return out;
+}
+function expRank(){ return {name:'员工排名',header:RANK_EXPORT_HEADER,rows:rankExportData()}; }
+function expChannel(){
+  const label=EXP_WHO(curChan);
+  const list=activeChannelRows().map(r=>{
+    const l=num(r['线索量']),o=num(r['订单量']),rf=num(r['退款']);
+    return {qi:r['期次'],ch:r['渠道'],l,o,rf,cvr:l?(o-rf)/l*100:null,rr:o?rf/o*100:null};
+  }).sort((a,b)=>qiNum(b.qi)-qiNum(a.qi)||b.l-a.l);
+  return {name:'渠道转化',header:['归属','期次','渠道','线索量','订单量','退款','订单转化率(%)','退款率(%)'],
+    rows:list.map(r=>[label,r.qi,r.ch,r.l,r.o,r.rf,r.cvr==null?'':round2(r.cvr),r.rr==null?'':round2(r.rr)])};
+}
+function expProcess(){
+  const d=D.process[curProc]||{rows:[],header:[]};
+  const cols=(d.header||[]).filter(Boolean);
+  const kw=(document.getElementById('procSearch').value||'').trim();
+  const rows=(d.rows||[]).filter(r=>state.groups.has(r['小组'])&&(!kw||(r['姓名']||'').includes(kw)||(r['小组']||'').includes(kw)))
+    .map(r=>[EXP_WHO(curProc),...cols.map(c=>{
+      const v=String(r[c]==null?'':r[c]).trim();
+      if(v==='') return '';
+      return (c.includes('率')&&!v.includes('%'))?round2(num(v))+'%':v;
+    })]);
+  return {name:'过程数据',header:['归属',...cols],rows};
+}
+const EXP_BUILDERS={qi:expQi,group:expGroup,rank:expRank,channel:expChannel,process:expProcess};
+
+/* ---- CSV / XLSX 下载 ---- */
+function csvCell(v){
+  if(v==null) return '';
+  const s=String(v);
+  return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+function csvText(header,rows){
+  return [header,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n');
+}
+function downloadBlob(blob,filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },1200);
+}
+function downloadCSV(set){
+  downloadBlob(new Blob(['\ufeff'+csvText(set.header,set.rows)],{type:'text/csv;charset=utf-8'}),
+    `月度看板_${set.name}_${stampTxt()}.csv`);
+}
+let toastTimer=null;
+function toast(msg){
+  let el=document.getElementById('toast');
+  if(!el){ el=document.createElement('div'); el.id='toast'; el.className='toast'; document.body.appendChild(el); }
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2400);
+}
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload=()=>window.XLSX?resolve(window.XLSX):reject(new Error('组件未就绪'));
+    s.onerror=()=>reject(new Error('组件加载失败'));
+    document.head.appendChild(s);
+  });
+}
+async function exportXLSX(){
+  const sets=[expOverview(),expQi(),expGroup(),expRank(),expChannel(),expProcess()];
+  let XLSX;
+  try{ XLSX=await loadXLSX(); }
+  catch(err){
+    const all=[];
+    sets.forEach(s=>{ all.push([],['【'+s.name+'】'],s.header,...s.rows); });
+    downloadBlob(new Blob(['\ufeff'+csvText([],all)],{type:'text/csv;charset=utf-8'}),`月度看板_全部数据_${stampTxt()}.csv`);
+    toast('Excel 组件不可用，已改为导出 CSV');
+    return;
+  }
+  const wb=XLSX.utils.book_new();
+  sets.forEach(s=>{
+    const ws=XLSX.utils.aoa_to_sheet([s.header,...s.rows]);
+    const body=s.rows.slice(0,300);
+    ws['!cols']=s.header.map((h,i)=>{
+      const len=Math.max(String(h).length, ...body.map(r=>String(r[i]==null?'':r[i]).replace(/[^\x00-\xff]/g,'xx').length));
+      return {wch:Math.min(34,Math.max(9,len+2))};
+    });
+    XLSX.utils.book_append_sheet(wb,ws,s.name);
+  });
+  XLSX.writeFile(wb,`月度看板_全部数据_${stampTxt()}.xlsx`);
+  toast('已导出 Excel（'+sets.length+' 个工作表）');
+}
+
+/* ---- 交互 ---- */
+const exportBtn=document.getElementById('exportBtn');
+const exportMenu=document.getElementById('exportMenu');
+function closeExportMenu(){
+  exportMenu.classList.remove('show');
+  exportBtn.classList.remove('on');
+}
+exportBtn.addEventListener('click',e=>{
+  e.stopPropagation();
+  const open=!exportMenu.classList.contains('show');
+  exportMenu.classList.toggle('show',open);
+  exportBtn.classList.toggle('on',open);
+  if(open) document.getElementById('exportFilterTxt').textContent=filterText();
+});
+document.addEventListener('click',e=>{ if(!e.target.closest('#exportWrap')) closeExportMenu(); });
+exportMenu.addEventListener('click',e=>{
+  const b=e.target.closest('.export-item'); if(!b) return;
+  closeExportMenu();
+  const kind=b.dataset.exp;
+  if(kind==='xlsx'){ exportXLSX(); return; }
+  const build=EXP_BUILDERS[kind]; if(!build) return;
+  const set=build();
+  if(!set.rows.length){ toast('当前筛选条件下没有可导出的数据'); return; }
+  downloadCSV(set);
+  toast(`已导出「${set.name}」${set.rows.length} 行`);
 });
 
 /* ================= 总渲染 ================= */
