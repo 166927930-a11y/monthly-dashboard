@@ -830,7 +830,7 @@ function groupCharts(){
     <div class="card"><div class="chart" id="chartGroupGmv-${w}" style="height:420px"></div></div>
     <div class="sec-title">${WHO_NAME[w]}小组转化率 与 GMV 完成率（红色虚线 = 转化率月度目标 ${cvrTargetOf(w)}%）</div>
     <div class="card"><div class="chart" id="chartGroupRate-${w}" style="height:380px"></div></div>
-    <div class="sec-title">${WHO_NAME[w]}小组明细</div>
+    <div class="sec-title">${WHO_NAME[w]}小组明细（按实际转化率降序）</div>
     <div class="tbl-scroll"><table id="groupTable-${w}"></table></div>`).join('');
   let shown=0,total=0;
   whos.forEach(w=>{
@@ -1038,9 +1038,9 @@ function regionAggByGroup(rows){
   return Object.values(map).map(m=>({...m,
     cvr:m.leads>0?(m.orders-m.refunds)/m.leads*100:0,
     refRate:m.orders>0?m.refunds/m.orders*100:0,
-    rate:m.goal>0?m.realGmv/m.goal*100:null})).sort((a,b)=>b.realGmv-a.realGmv);
+    rate:m.goal>0?m.realGmv/m.goal*100:null})).sort((a,b)=>b.cvr-a.cvr||b.realGmv-a.realGmv);
 }
-const regSort={field:'realGmv',dir:'desc'};
+const regSort={field:'cvr',dir:'desc'};
 function regVal(g,f){
   switch(f){
     case 'name': return g.name;
@@ -1142,7 +1142,7 @@ function renderRegion(){
       <div class="kpi-grid">${kpis}</div>
       <div class="sec-title">${def.name} · 分期次 GMV 与转化率</div>
       <div class="card"><div class="chart" id="chartReg-${def.key}" style="height:300px"></div></div>
-      <div class="sec-title">${def.name} · 小组明细（按实际GMV降序）</div>
+      <div class="sec-title">${def.name} · 小组明细（按实际转化率降序）</div>
       ${regionTableHtml(gs)}
     </div>`;
   }).join('');
