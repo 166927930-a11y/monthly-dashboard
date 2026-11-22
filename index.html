@@ -612,7 +612,7 @@
 </main>
 </div>
 
-<script src="data.js?v=11"></script>
+<script src="data.js?v=12"></script>
 <script>
 /* ================= 基础 ================= */
 let D = window.DASH;
@@ -1952,7 +1952,7 @@ exportMenu.addEventListener('click',e=>{
 
 /* ================= 总渲染 ================= */
 /* ================= 环比追踪（员工 / 小组 · 成交 / 过程） ================= */
-const MOM={mode:'deal',dim:'emp',metric:'实际GMV',span:4,kw:'',sortIdx:-1,trend:new Set()};
+const MOM={mode:'deal',dim:'emp',metric:'实际转化率',span:4,kw:'',sortIdx:-1,trend:new Set()};
 const MOM_METRICS={
   deal:[
     {k:'实际GMV',label:'实际GMV',kind:'money'},
@@ -2054,14 +2054,14 @@ function momDelta(cur,prev,kind){
 }
 /* 环比趋势图：左=筛选范围整体走势，右=Top 对象多线对比 */
 const MOM_PALETTE=['#4f46e5','#0d9488','#d97706','#be123c','#7c3aed','#0284c7','#65a30d','#db2777','#475569','#b45309'];
-function momChartHtml(w,def){
+function momChartHtml(w,def,periods){
   return `<div class="mom-charts">
     <div class="card mom-chart-card">
       <div class="mom-chart-head"><span>整体趋势</span><em>当前筛选范围合计 / 加权 · ${def.label}</em></div>
       <div class="chart" id="momAgg-${w}" style="height:238px"></div>
     </div>
     <div class="card mom-chart-card">
-      <div class="mom-chart-head"><span>${MOM.dim==='emp'?'涨跌 Top 与预警':'小组涨跌 Top 与预警'}</span><em>增幅最高 3 人 + 跌幅预警 3 人 · 按 ${def.label}</em></div>
+      <div class="mom-chart-head"><span>${MOM.dim==='emp'?'员工涨跌斜率对比':'小组涨跌斜率对比'}</span><em>${periods&&periods.length?periods[0]+' → '+periods[periods.length-1]+' · ':''}增幅 3 + 预警 3 · 按 ${def.label}</em></div>
       <div class="chart" id="momTop-${w}" style="height:238px"></div>
     </div>
   </div>`;
@@ -2115,7 +2115,7 @@ function drawMomCharts(w,rows,periods,def){
     });
   }
 
-  /* ---- 右侧：涨跌 Top —— 增幅最高 3 人 + 跌幅最狠 3 人（预警） ---- */
+  /* ---- 右侧：涨跌斜率图 —— 期初 → 期末连线，斜率即变化幅度；增幅最高 3 + 跌幅预警 3 ---- */
   const elT=document.getElementById('momTop-'+w);
   if(elT){
     /* 区间变化值：率类用 pp 差，金额/数量用百分比变化；无法比较返回 null */
@@ -2138,38 +2138,39 @@ function drawMomCharts(w,rows,periods,def){
     }else{
       const gainColors=['#c92a2a','#e0655f','#ef9d97'];
       const lossColors=['#0d8a5f','#4fb389','#93cdb2'];
-      const series=sel.map((x,i)=>{
+      /* 斜率画法：整条序列只保留「首个有数据期」与「最新有数据期」两个点，connectNulls 连成一条斜线 */
+      const series=sel.map(x=>{
         const isUp=x.d>0;
         const color=(isUp?gainColors:lossColors)[isUp?(gainers.indexOf(x))%3:(losers.indexOf(x))%3];
         const nm=(x.r.name||'—');
-        x._legend=(isUp?'▲ ':'⚠ ▼ ')+nm+' '+dTxt(x.d);
+        let fi=-1,li=-1;
+        x.r.vals.forEach((v,j)=>{ if(v!=null){ if(fi<0) fi=j; li=j; } });
         return {
-          name:x._legend,
-          type:'line',smooth:true,symbol:'circle',symbolSize:6,connectNulls:true,
-          data:x.r.vals,
-          lineStyle:{width:2.2,color:color},
+          name:nm+' '+dTxt(x.d),
+          type:'line',smooth:false,symbol:'circle',symbolSize:7,connectNulls:true,
+          data:x.r.vals.map((v,j)=>(j===fi||j===li)?v:null),
+          lineStyle:{width:2.4,color:color,type:isUp?'solid':'dashed'},
           itemStyle:{color:color,borderColor:'#fff',borderWidth:1.5},
+          label:{show:true,distance:5,fontSize:10,fontWeight:600,color:color,
+            formatter:p=>momFmt(p.value,def.kind)},
           emphasis:{focus:'series'}
         };
       });
-      const byLegend={}; sel.forEach(x=>{ byLegend[x._legend]=x; });
       const c=charts['momTop-'+w]=echarts.init(elT);
       c.setOption({
-        grid:{left:4,right:52,top:44,bottom:4,containLabel:true},
+        grid:{left:4,right:56,top:44,bottom:4,containLabel:true},
         legend:{top:2,left:0,type:'scroll',itemWidth:10,itemHeight:10,itemGap:12,
           textStyle:{fontSize:11,color:'#5a6b85'},pageIconColor:'#4f46e5',pageTextStyle:{color:'#5a6b85'}},
-        tooltip:Object.assign({trigger:'axis',axisPointer:{type:'line',lineStyle:{color:'#a5b4fc',type:'dashed'}},
-          formatter:ps=>{
-            const i=ps[0].dataIndex;
-            const lines=ps.map(p=>{
-              const v=p.value; if(v==null) return '';
-              let prev=null;
-              const x=byLegend[p.seriesName];
-              if(x){ for(let j=i-1;j>=0;j--){ if(x.r.vals[j]!=null){ prev=x.r.vals[j]; break; } } }
-              const d=momDelta(v,prev,def.kind);
-              return `${p.marker}<b>${momFmt(v,def.kind)}</b> <span style="color:${momDeltaColor(d)};font-weight:600">${d.txt}</span>`;
-            }).filter(Boolean);
-            return `<b>${periods[i]}</b><br/>`+lines.join('<br/>');
+        tooltip:Object.assign({trigger:'item',
+          formatter:p=>{
+            const x=sel.find(s=>s.r.name===p.seriesName); if(!x) return '';
+            let fi=-1,li=-1;
+            x.r.vals.forEach((v,j)=>{ if(v!=null){ if(fi<0) fi=j; li=j; } });
+            const dd=momDelta(x.r.vals[li],x.r.vals[fi],def.kind);
+            return `<b>${x.r.name}</b>${(MOM.dim==='emp'&&x.r.group)?`<span style="color:#8a97ad">（${x.r.group}）</span>`:''}<br/>`+
+              `${periods[fi]}：<b>${momFmt(x.r.vals[fi],def.kind)}</b><br/>`+
+              `${periods[li]}：<b>${momFmt(x.r.vals[li],def.kind)}</b><br/>`+
+              `区间变化：<span style="color:${momDeltaColor(dd)};font-weight:600">${dd.txt}</span>`;
           }},TT),
         xAxis:Object.assign({type:'category',boundaryGap:false,data:periods},AX),
         yAxis:{type:'value',scale:true,splitLine:GRID_S,axisLine:{show:false},
@@ -2236,7 +2237,7 @@ function renderMom(){
         cells+`<td class="mom-td mom-span"><span class="mom-d ${tot.cls}">${tot.txt}</span></td></tr>`;
     }).join('');
     html+=`<div class="sec-title">${title}${trendTxt}（${periods[0]} → ${periods[periods.length-1]} · 按${def.label} · 共 ${rows.length} 个）</div>`+
-      momChartHtml(w,def)+
+      momChartHtml(w,def,periods)+
       `<div class="tbl-scroll"><table class="mom-table"><thead><tr>
       <th>排名</th><th>${MOM.dim==='emp'?'姓名':'小组'}</th>${MOM.dim==='emp'?'<th>小组</th>':''}${head}<th>区间变化</th>
       </tr></thead><tbody>${body}</tbody></table></div>`;
