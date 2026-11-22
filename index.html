@@ -2061,7 +2061,7 @@ function momChartHtml(w,def){
       <div class="chart" id="momAgg-${w}" style="height:238px"></div>
     </div>
     <div class="card mom-chart-card">
-      <div class="mom-chart-head"><span>${MOM.dim==='emp'?'Top 员工趋势':'各小组趋势'}</span><em>按最新期 ${def.label} 排序</em></div>
+      <div class="mom-chart-head"><span>${MOM.dim==='emp'?'涨跌 Top 与预警':'小组涨跌 Top 与预警'}</span><em>增幅最高 3 人 + 跌幅预警 3 人 · 按 ${def.label}</em></div>
       <div class="chart" id="momTop-${w}" style="height:238px"></div>
     </div>
   </div>`;
@@ -2115,43 +2115,68 @@ function drawMomCharts(w,rows,periods,def){
     });
   }
 
-  /* ---- 右侧：Top 对象（员工取前 6，小组全展示） ---- */
+  /* ---- 右侧：涨跌 Top —— 增幅最高 3 人 + 跌幅最狠 3 人（预警） ---- */
   const elT=document.getElementById('momTop-'+w);
   if(elT){
-    const n=MOM.dim==='emp'?6:Math.min(rows.length,10);
-    const top=rows.slice(0,n);
-    const series=top.map((r,i)=>({
-      name:r.name||'—',
-      type:'line',smooth:true,symbol:'circle',symbolSize:5,connectNulls:true,
-      data:r.vals,
-      lineStyle:{width:i===0?2.6:1.8,color:MOM_PALETTE[i%MOM_PALETTE.length],opacity:i===0?1:.92},
-      itemStyle:{color:MOM_PALETTE[i%MOM_PALETTE.length],borderColor:'#fff',borderWidth:1.5},
-      emphasis:{focus:'series'}
-    }));
-    const c=charts['momTop-'+w]=echarts.init(elT);
-    c.setOption({
-      color:MOM_PALETTE,
-      grid:{left:4,right:52,top:44,bottom:4,containLabel:true},
-      legend:{top:2,left:0,type:'scroll',itemWidth:10,itemHeight:10,itemGap:12,
-        textStyle:{fontSize:11,color:'#5a6b85'},pageIconColor:'#4f46e5',pageTextStyle:{color:'#5a6b85'}},
-      tooltip:Object.assign({trigger:'axis',axisPointer:{type:'line',lineStyle:{color:'#a5b4fc',type:'dashed'}},
-        formatter:ps=>{
-          const i=ps[0].dataIndex;
-          const lines=ps.map(p=>{
-            const v=p.value; if(v==null) return '';
-            let prev=null;
-            const s=top.find(t=>t.name===p.seriesName);
-            if(s){ for(let j=i-1;j>=0;j--){ if(s.vals[j]!=null){ prev=s.vals[j]; break; } } }
-            const d=momDelta(v,prev,def.kind);
-            return `${p.marker}${p.seriesName}：<b>${momFmt(v,def.kind)}</b> <span style="color:${momDeltaColor(d)};font-weight:600">${d.txt}</span>`;
-          }).filter(Boolean);
-          return `<b>${periods[i]}</b><br/>`+lines.join('<br/>');
-        }},TT),
-      xAxis:Object.assign({type:'category',boundaryGap:false,data:periods},AX),
-      yAxis:{type:'value',scale:true,splitLine:GRID_S,axisLine:{show:false},
-        axisLabel:{color:'#5a6b85',formatter:momAxisLabel(def.kind)}},
-      series
-    });
+    /* 区间变化值：率类用 pp 差，金额/数量用百分比变化；无法比较返回 null */
+    const dVal=vals=>{
+      let fv=null,lv=null,n=0;
+      vals.forEach(v=>{ if(v!=null){ if(fv==null) fv=v; lv=v; n++; } });
+      if(n<2||!isFinite(fv)||!isFinite(lv)) return null;
+      if(def.kind==='pct') return lv-fv;
+      if(fv===0) return null;
+      return (lv-fv)/Math.abs(fv)*100;
+    };
+    const dTxt=d=>d==null?'—':(d>0?'+':'')+d.toFixed(1)+(def.kind==='pct'?'pp':'%');
+    const withD=rows.map(r=>({r,d:dVal(r.vals)})).filter(x=>x.d!=null);
+    const gainers=withD.filter(x=>x.d>0.05).sort((a,b)=>b.d-a.d).slice(0,3);
+    const losers =withD.filter(x=>x.d<-0.05).sort((a,b)=>a.d-b.d).slice(0,3);
+    const sel=[...gainers,...losers];
+    if(!sel.length){
+      charts['momTop-'+w]=null;
+      elT.innerHTML='<div class="empty-tip" style="display:flex;align-items:center;justify-content:center;height:100%">当前窗口内没有明显的涨跌变化</div>';
+    }else{
+      const gainColors=['#c92a2a','#e0655f','#ef9d97'];
+      const lossColors=['#0d8a5f','#4fb389','#93cdb2'];
+      const series=sel.map((x,i)=>{
+        const isUp=x.d>0;
+        const color=(isUp?gainColors:lossColors)[isUp?(gainers.indexOf(x))%3:(losers.indexOf(x))%3];
+        const nm=(x.r.name||'—');
+        x._legend=(isUp?'▲ ':'⚠ ▼ ')+nm+' '+dTxt(x.d);
+        return {
+          name:x._legend,
+          type:'line',smooth:true,symbol:'circle',symbolSize:6,connectNulls:true,
+          data:x.r.vals,
+          lineStyle:{width:2.2,color:color},
+          itemStyle:{color:color,borderColor:'#fff',borderWidth:1.5},
+          emphasis:{focus:'series'}
+        };
+      });
+      const byLegend={}; sel.forEach(x=>{ byLegend[x._legend]=x; });
+      const c=charts['momTop-'+w]=echarts.init(elT);
+      c.setOption({
+        grid:{left:4,right:52,top:44,bottom:4,containLabel:true},
+        legend:{top:2,left:0,type:'scroll',itemWidth:10,itemHeight:10,itemGap:12,
+          textStyle:{fontSize:11,color:'#5a6b85'},pageIconColor:'#4f46e5',pageTextStyle:{color:'#5a6b85'}},
+        tooltip:Object.assign({trigger:'axis',axisPointer:{type:'line',lineStyle:{color:'#a5b4fc',type:'dashed'}},
+          formatter:ps=>{
+            const i=ps[0].dataIndex;
+            const lines=ps.map(p=>{
+              const v=p.value; if(v==null) return '';
+              let prev=null;
+              const x=byLegend[p.seriesName];
+              if(x){ for(let j=i-1;j>=0;j--){ if(x.r.vals[j]!=null){ prev=x.r.vals[j]; break; } } }
+              const d=momDelta(v,prev,def.kind);
+              return `${p.marker}<b>${momFmt(v,def.kind)}</b> <span style="color:${momDeltaColor(d)};font-weight:600">${d.txt}</span>`;
+            }).filter(Boolean);
+            return `<b>${periods[i]}</b><br/>`+lines.join('<br/>');
+          }},TT),
+        xAxis:Object.assign({type:'category',boundaryGap:false,data:periods},AX),
+        yAxis:{type:'value',scale:true,splitLine:GRID_S,axisLine:{show:false},
+          axisLabel:{color:'#5a6b85',formatter:momAxisLabel(def.kind)}},
+        series
+      });
+    }
   }
 }
 /* 走向：与「区间变化」同口径——窗口内首个有数据期 → 最新有数据期 */
